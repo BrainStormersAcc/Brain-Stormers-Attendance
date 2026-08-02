@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { 
   LayoutDashboard, 
@@ -11,7 +11,10 @@ import {
   WifiOff, 
   Clock,
   Settings,
-  Lock
+  Lock,
+  Smile,
+  Check,
+  RefreshCw
 } from 'lucide-react';
 import NeuThemeToggle from './NeuThemeToggle';
 import { useAuth } from '../../contexts/AuthContext.jsx';
@@ -23,9 +26,36 @@ import NeuAvatar from './NeuAvatar';
 function DashboardLayout() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { userProfile, currentUser, logout, changePassword } = useAuth();
+  const { userProfile, currentUser, logout, changePassword, updateAvatar } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
+  
+  // Dropdown & Modal states
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const dropdownRef = useRef(null);
+
+  // Avatar customizer state
+  const [isAvatarModalOpen, setIsAvatarModalOpen] = useState(false);
+  const avatarOptions = ['👨‍💻', '👩‍💻', '👨‍💼', '👩‍💼', '🤖', '🦁', '🦉', '🦄', '🦊', '🍅', '⚽', '🚀'];
+  const [tempSelectedAvatar, setTempSelectedAvatar] = useState(userProfile?.avatar || '');
+  const [isSavingAvatar, setIsSavingAvatar] = useState(false);
+
+  const handleSaveAvatar = async () => {
+    if (!tempSelectedAvatar) return;
+    setIsSavingAvatar(true);
+    
+    // Play charming pulse and loader for 1.5 seconds before updating state
+    setTimeout(async () => {
+      try {
+        await updateAvatar(tempSelectedAvatar);
+        setIsAvatarModalOpen(false);
+      } catch (err) {
+        console.error('Failed to update avatar:', err);
+      } finally {
+        setIsSavingAvatar(false);
+      }
+    }, 1500);
+  };
 
   // Password change modal state
   const [isPassModalOpen, setIsPassModalOpen] = useState(false);
@@ -36,6 +66,7 @@ function DashboardLayout() {
   const [passError, setPassError] = useState('');
   const [passSuccess, setPassSuccess] = useState('');
 
+  // Online status listener
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
     const handleOffline = () => setIsOnline(false);
@@ -47,6 +78,17 @@ function DashboardLayout() {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
+  }, []);
+
+  // Click outside listener for dropdown closing
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+        setDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
   const handleSignOut = async (e) => {
@@ -97,12 +139,17 @@ function DashboardLayout() {
     }
   };
 
+  const isAdmin = userProfile?.role === 'admin';
+  const isStaff = userProfile?.role === 'staff';
+
   const navItems = [
-    userProfile?.role === 'admin' && { name: 'Dashboard', path: '/', icon: LayoutDashboard },
-    (userProfile?.role === 'staff' || userProfile?.role === 'admin') && { name: 'Staff Attendance', path: '/staff-attendance', icon: Clock },
-    import.meta.env.DEV && { name: 'Style Guide', path: '/style-guide', icon: Settings },
-    { name: 'Student Portal (Future)', path: '#', icon: GraduationCap, disabled: true },
-    { name: 'Teacher Portal (Future)', path: '#', icon: Users, disabled: true },
+    isAdmin && { name: 'Overview', path: '/', icon: LayoutDashboard },
+    isAdmin && { name: 'Staff Account Management', path: '/staff-management', icon: Users },
+    isAdmin && { name: 'Attendance Records', path: '/attendance-records', icon: Clock },
+    isAdmin && { name: 'Admin Settings', path: '/admin-settings', icon: Settings },
+    (isStaff || isAdmin) && { name: 'Staff Attendance', path: '/staff-attendance', icon: Clock },
+    { name: 'Student Portal (Under Construction)', path: '#', icon: GraduationCap, underConstruction: true },
+    { name: 'Teacher Portal (Under Construction)', path: '#', icon: Users, underConstruction: true },
   ].filter(Boolean);
 
   return (
@@ -121,6 +168,7 @@ function DashboardLayout() {
         zIndex: 10,
         transition: 'transform var(--transition-normal)'
       }} className={`desktop-sidebar ${sidebarOpen ? 'open' : ''}`}>
+        
         {/* Sidebar Header */}
         <div style={{
           padding: '24px',
@@ -149,7 +197,14 @@ function DashboardLayout() {
         </div>
 
         {/* Sidebar Nav Links */}
-        <nav style={{ flex: 1, padding: '24px 16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        <nav style={{ 
+          flex: 1, 
+          padding: '24px 16px', 
+          display: 'flex', 
+          flexDirection: 'column', 
+          gap: '8px',
+          overflowY: 'auto'
+        }}>
           {navItems.map((item, idx) => {
             const Icon = item.icon;
             const isActive = location.pathname === item.path;
@@ -172,100 +227,46 @@ function DashboardLayout() {
               );
             }
 
+            if (item.underConstruction) {
+              return (
+                <div key={idx} className="under-construction-link">
+                  <Icon size={18} />
+                  <span>{item.name}</span>
+                </div>
+              );
+            }
+
             return (
               <Link
                 key={idx}
                 to={item.path}
                 onClick={() => setSidebarOpen(false)}
+                className={`sidebar-nav-link ${isActive ? 'active' : ''}`}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
                   gap: '12px',
                   padding: '12px 16px',
                   color: isActive ? 'var(--text-primary)' : 'var(--text-secondary)',
-                  backgroundColor: isActive ? 'var(--color-primary-glow)' : 'transparent',
+                  backgroundColor: isActive ? 'var(--color-success-glow)' : 'transparent',
                   borderRadius: 'var(--border-radius-sm)',
-                  transition: 'background var(--transition-fast), color var(--transition-fast)',
+                  transition: 'all var(--transition-fast)',
                   fontSize: '0.95rem',
-                  borderLeft: isActive ? '3px solid var(--color-primary)' : '3px solid transparent'
+                  borderLeft: isActive ? '3px solid var(--color-success)' : '3px solid transparent',
+                  boxShadow: isActive ? 'inset 1px 1px 3px var(--color-shadow-dark), inset -1px -1px 3px var(--color-shadow-light)' : 'none'
                 }}
               >
-                <Icon size={18} style={{ color: isActive ? 'var(--color-primary)' : 'inherit' }} />
+                <Icon size={18} style={{ color: isActive ? 'var(--color-success)' : 'inherit' }} />
                 <span>{item.name}</span>
               </Link>
             );
           })}
         </nav>
-
-        {/* Sidebar Footer */}
-        <div style={{ padding: '24px', borderTop: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <NeuAvatar
-              initials={userProfile?.name?.charAt(0).toUpperCase() || '?'}
-              size={40}
-            />
-            <div style={{ overflow: 'hidden' }}>
-              <p style={{ fontSize: '0.875rem', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {userProfile?.name || 'User Account'}
-              </p>
-              <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {currentUser?.email || ''}
-              </p>
-            </div>
-          </div>
-          
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            <button 
-              onClick={() => setIsPassModalOpen(true)}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                color: 'var(--text-secondary)',
-                fontSize: '0.875rem',
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
-                padding: 0,
-                textAlign: 'left',
-                fontFamily: 'var(--font-sans)',
-                transition: 'color var(--transition-fast)'
-              }}
-              onMouseOver={(e) => e.target.style.color = 'var(--text-primary)'}
-              onMouseOut={(e) => e.target.style.color = 'var(--text-secondary)'}
-            >
-              <Lock size={16} />
-              <span>Change Password</span>
-            </button>
-
-            <button 
-              onClick={handleSignOut}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                color: 'var(--text-secondary)',
-                fontSize: '0.875rem',
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
-                padding: 0,
-                textAlign: 'left',
-                fontFamily: 'var(--font-sans)',
-                transition: 'color var(--transition-fast)'
-              }}
-              onMouseOver={(e) => e.target.style.color = 'var(--text-primary)'}
-              onMouseOut={(e) => e.target.style.color = 'var(--text-secondary)'}
-            >
-              <LogOut size={16} />
-              <span>Sign Out</span>
-            </button>
-          </div>
-        </div>
       </aside>
 
       {/* Main Content Area */}
       <div style={{ flex: 1, marginLeft: '280px', display: 'flex', flexDirection: 'column' }} className="main-container">
+        
         {/* Top Header */}
         <header style={{
           height: '70px',
@@ -295,6 +296,7 @@ function DashboardLayout() {
           </button>
 
           <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '20px' }}>
+            
             {/* Theme Toggle */}
             <NeuThemeToggle />
 
@@ -322,6 +324,153 @@ function DashboardLayout() {
                 </>
               )}
             </div>
+
+            {/* User Profile Avatar Dropdown */}
+            <div className="avatar-dropdown-container" ref={dropdownRef} style={{ position: 'relative' }}>
+              <button
+                onClick={() => setDropdownOpen(!dropdownOpen)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  padding: '4px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  outline: 'none',
+                  borderRadius: '50%',
+                  boxShadow: dropdownOpen ? 'var(--neu-shadow-pressed-sm)' : 'var(--neu-shadow-raised-sm)',
+                  transition: 'box-shadow var(--transition-fast)'
+                }}
+              >
+                <NeuAvatar
+                  initials={userProfile?.avatar || userProfile?.name?.charAt(0).toUpperCase() || '?'}
+                  size={36}
+                />
+              </button>
+
+              {/* Smooth Animated Dropdown menu */}
+              <div 
+                style={{
+                  position: 'absolute',
+                  right: 0,
+                  top: '50px',
+                  width: '240px',
+                  backgroundColor: 'var(--bg-surface)',
+                  border: '1px solid var(--border-color)',
+                  borderRadius: 'var(--border-radius-md)',
+                  boxShadow: 'var(--neu-shadow-raised)',
+                  padding: '16px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '12px',
+                  zIndex: 200,
+                  opacity: dropdownOpen ? 1 : 0,
+                  transform: dropdownOpen ? 'translateY(0) scale(1)' : 'translateY(-10px) scale(0.95)',
+                  visibility: dropdownOpen ? 'visible' : 'hidden',
+                  transformOrigin: 'top right',
+                  transition: 'opacity var(--transition-normal), transform var(--transition-normal), visibility var(--transition-normal)'
+                }}
+              >
+                {/* User Info details */}
+                <div style={{ borderBottom: '1px solid var(--border-color)', paddingBottom: '12px' }}>
+                  <p style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {userProfile?.name || 'User Account'}
+                  </p>
+                  <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {userProfile?.username || currentUser?.email || ''}
+                  </p>
+                </div>
+
+                 {/* Operations links */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {isAdmin && (
+                    <button 
+                      onClick={() => {
+                        setDropdownOpen(false);
+                        setIsPassModalOpen(true);
+                      }}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        color: 'var(--text-secondary)',
+                        fontSize: '0.875rem',
+                        background: 'none',
+                        border: 'none',
+                        cursor: 'pointer',
+                        padding: '6px 0',
+                        width: '100%',
+                        textAlign: 'left',
+                        fontFamily: 'var(--font-sans)',
+                        transition: 'color var(--transition-fast)'
+                      }}
+                      onMouseOver={(e) => e.currentTarget.style.color = 'var(--text-primary)'}
+                      onMouseOut={(e) => e.currentTarget.style.color = 'var(--text-secondary)'}
+                    >
+                      <Lock size={16} />
+                      <span>Change Password</span>
+                    </button>
+                  )}
+
+                  <button 
+                    onClick={() => {
+                      setDropdownOpen(false);
+                      setTempSelectedAvatar(userProfile?.avatar || '');
+                      setIsAvatarModalOpen(true);
+                    }}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      color: 'var(--text-secondary)',
+                      fontSize: '0.875rem',
+                      background: 'none',
+                      border: 'none',
+                      cursor: 'pointer',
+                      padding: '6px 0',
+                      width: '100%',
+                      textAlign: 'left',
+                      fontFamily: 'var(--font-sans)',
+                      transition: 'color var(--transition-fast)'
+                    }}
+                    onMouseOver={(e) => e.currentTarget.style.color = 'var(--text-primary)'}
+                    onMouseOut={(e) => e.currentTarget.style.color = 'var(--text-secondary)'}
+                  >
+                    <Smile size={16} />
+                    <span>Change Avatar</span>
+                  </button>
+
+                  <button 
+                    onClick={(e) => {
+                      setDropdownOpen(false);
+                      handleSignOut(e);
+                    }}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      color: 'var(--text-secondary)',
+                      fontSize: '0.875rem',
+                      background: 'none',
+                      border: 'none',
+                      cursor: 'pointer',
+                      padding: '6px 0',
+                      width: '100%',
+                      textAlign: 'left',
+                      fontFamily: 'var(--font-sans)',
+                      transition: 'color var(--transition-fast)'
+                    }}
+                    onMouseOver={(e) => e.currentTarget.style.color = 'var(--text-primary)'}
+                    onMouseOut={(e) => e.currentTarget.style.color = 'var(--text-secondary)'}
+                  >
+                    <LogOut size={16} />
+                    <span>Sign Out</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
           </div>
         </header>
 
@@ -458,6 +607,162 @@ function DashboardLayout() {
                 </NeuButton>
               </div>
             </form>
+          </NeuCard>
+        </div>
+      )}
+
+      {/* Change Avatar Modal */}
+      {isAvatarModalOpen && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          backdropFilter: 'blur(8px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+          padding: '20px'
+        }} onClick={() => setIsAvatarModalOpen(false)}>
+          <NeuCard 
+            variant="raised" 
+            style={{
+              width: '100%',
+              maxWidth: '380px',
+              position: 'relative',
+              padding: '36px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '24px',
+              textAlign: 'center'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Close Button */}
+            <button 
+              onClick={() => setIsAvatarModalOpen(false)}
+              style={{
+                position: 'absolute',
+                top: '20px',
+                right: '20px',
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                color: 'var(--text-secondary)'
+              }}
+            >
+              <X size={20} />
+            </button>
+
+            {/* Modal Title */}
+            <div>
+              <h3 style={{ fontSize: '1.5rem', fontFamily: 'var(--font-display)', marginBottom: '8px' }}>Select Avatar</h3>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>Choose your personal profile icon style</p>
+            </div>
+
+            {/* Avatar Grid Selection */}
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(3, 1fr)',
+              gap: '20px',
+              padding: '10px 0'
+            }}>
+              {avatarOptions.map((avatar, idx) => {
+                const isSelected = tempSelectedAvatar === avatar;
+                const shouldPulse = isSavingAvatar && isSelected;
+                return (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => {
+                      if (!isSavingAvatar) {
+                        setTempSelectedAvatar(avatar);
+                      }
+                    }}
+                    disabled={isSavingAvatar}
+                    style={{
+                      background: 'var(--bg-surface)',
+                      border: '1px solid var(--border-color)',
+                      borderRadius: 'var(--border-radius-md)',
+                      padding: '16px',
+                      fontSize: '2rem',
+                      cursor: isSavingAvatar ? 'default' : 'pointer',
+                      outline: 'none',
+                      position: 'relative',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      boxShadow: isSelected ? 'var(--neu-shadow-pressed-sm)' : 'var(--neu-shadow-raised-sm)',
+                      transition: 'box-shadow var(--transition-fast), transform var(--transition-fast)',
+                      transform: isSelected ? 'scale(0.98)' : 'scale(1)'
+                    }}
+                    className={shouldPulse ? 'animate-avatar-pulse' : ''}
+                    onMouseOver={(e) => {
+                      if (!isSavingAvatar && !isSelected) {
+                        e.currentTarget.style.transform = 'scale(1.05)';
+                      }
+                    }}
+                    onMouseOut={(e) => {
+                      if (!isSavingAvatar) {
+                        e.currentTarget.style.transform = isSelected ? 'scale(0.98)' : 'scale(1)';
+                      }
+                    }}
+                  >
+                    {avatar}
+
+                    {/* Selected Checkmark Badge Overlay */}
+                    {isSelected && (
+                      <div style={{
+                        position: 'absolute',
+                        top: '-6px',
+                        right: '-6px',
+                        width: '20px',
+                        height: '20px',
+                        borderRadius: '50%',
+                        backgroundColor: 'var(--color-success)',
+                        color: '#fff',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        boxShadow: '0 2px 4px rgba(0,0,0,0.15)',
+                        zIndex: 15
+                      }}>
+                        <Check size={12} strokeWidth={3} />
+                      </div>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Save Button triggers pulse loader */}
+            <div style={{ display: 'flex', gap: '12px', marginTop: '10px' }}>
+              <NeuButton 
+                onClick={() => setIsAvatarModalOpen(false)} 
+                style={{ flex: 1 }}
+                disabled={isSavingAvatar}
+              >
+                Cancel
+              </NeuButton>
+              <NeuButton 
+                onClick={handleSaveAvatar} 
+                variant="accent" 
+                style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
+                disabled={isSavingAvatar || !tempSelectedAvatar}
+              >
+                {isSavingAvatar ? (
+                  <>
+                    <RefreshCw size={16} className="animate-spin" />
+                    <span>Applying...</span>
+                  </>
+                ) : (
+                  <span>Save Avatar</span>
+                )}
+              </NeuButton>
+            </div>
           </NeuCard>
         </div>
       )}

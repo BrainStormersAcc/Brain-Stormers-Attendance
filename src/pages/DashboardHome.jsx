@@ -15,13 +15,15 @@ import {
   AlertCircle,
   Trash2,
   Eye,
-  EyeOff
+  EyeOff,
+  ChevronDown
 } from 'lucide-react';
 import NeuCard from '../shared/components/NeuCard.jsx';
 import NeuButton from '../shared/components/NeuButton.jsx';
 import NeuInput from '../shared/components/NeuInput.jsx';
 import NeuToggle from '../shared/components/NeuToggle.jsx';
 import NeuAvatar from '../shared/components/NeuAvatar.jsx';
+import NeuDatePicker from '../shared/components/NeuDatePicker.jsx';
 import { 
   createStaffAccount, 
   getAllStaff, 
@@ -32,8 +34,8 @@ import {
 } from '../services/adminService.js';
 import { useAuth } from '../contexts/AuthContext.jsx';
 
-export default function DashboardHome() {
-  const [activeTab, setActiveTab] = useState('overview'); // 'overview' | 'staff' | 'records' | 'admin-settings'
+export default function DashboardHome(props) {
+  const activeTab = props.view || 'overview';
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -367,33 +369,7 @@ export default function DashboardHome() {
         </div>
       )}
 
-      {/* Dashboard Sub-navigation Tabs */}
-      <div style={{ display: 'flex', gap: '16px', overflowX: 'auto', paddingBottom: '4px' }}>
-        <NeuButton 
-          variant={activeTab === 'overview' ? 'accent' : 'normal'}
-          onClick={() => setActiveTab('overview')}
-        >
-          Overview
-        </NeuButton>
-        <NeuButton 
-          variant={activeTab === 'staff' ? 'accent' : 'normal'}
-          onClick={() => setActiveTab('staff')}
-        >
-          Staff Account Management
-        </NeuButton>
-        <NeuButton 
-          variant={activeTab === 'records' ? 'accent' : 'normal'}
-          onClick={() => setActiveTab('records')}
-        >
-          Attendance Records
-        </NeuButton>
-        <NeuButton 
-          variant={activeTab === 'admin-settings' ? 'accent' : 'normal'}
-          onClick={() => setActiveTab('admin-settings')}
-        >
-          Admin Settings
-        </NeuButton>
-      </div>
+
 
       {/* Tab Yield Viewports */}
       <div className="tab-viewport">
@@ -441,7 +417,7 @@ export default function DashboardHome() {
                 </div>
                 <div>
                   <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Students Checked In</p>
-                  <h3 style={{ fontSize: '1.75rem', fontWeight: 700 }}>342 / 400</h3>
+                  <h3 style={{ fontSize: '1.75rem', fontWeight: 700 }}>0 / 0</h3>
                 </div>
               </NeuCard>
 
@@ -656,73 +632,60 @@ export default function DashboardHome() {
                 {/* Staff Filter Dropdown */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                   <label className="neu-input-label">Staff Member</label>
-                  <select 
-                    value={filterStaff}
-                    onChange={(e) => setFilterStaff(e.target.value)}
-                    style={{
-                      width: '100%',
-                      padding: '12px 16px',
-                      background: 'var(--bg-surface)',
-                      color: 'var(--text-primary)',
-                      border: '1px solid var(--border-color)',
-                      borderRadius: 'var(--border-radius-sm)',
-                      boxShadow: 'var(--neu-shadow-pressed-sm)',
-                      fontFamily: 'var(--font-sans)',
-                      fontSize: '0.95rem',
-                      outline: 'none',
-                      transition: 'border-color var(--transition-normal)'
-                    }}
-                  >
-                    <option value="">All Staff</option>
-                    {staffList.map(s => (
-                      <option key={s.uid} value={s.uid}>{s.name}</option>
-                    ))}
-                  </select>
+                  <div style={{ position: 'relative', width: '100%' }}>
+                    <select 
+                      value={filterStaff}
+                      onChange={(e) => setFilterStaff(e.target.value)}
+                      style={{
+                        width: '100%',
+                        padding: '12px 36px 12px 16px',
+                        background: 'var(--bg-surface)',
+                        color: 'var(--text-primary)',
+                        border: '1px solid var(--border-color)',
+                        borderRadius: 'var(--border-radius-sm)',
+                        boxShadow: 'var(--neu-shadow-pressed-sm)',
+                        fontFamily: 'var(--font-sans)',
+                        fontSize: '0.95rem',
+                        outline: 'none',
+                        transition: 'border-color var(--transition-normal)',
+                        appearance: 'none',
+                        WebkitAppearance: 'none',
+                        MozAppearance: 'none'
+                      }}
+                    >
+                      <option value="">All Staff</option>
+                      {staffList.map(s => (
+                        <option key={s.uid} value={s.uid}>{s.name}</option>
+                      ))}
+                    </select>
+                    <div style={{
+                      position: 'absolute',
+                      right: '16px',
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      pointerEvents: 'none',
+                      color: 'var(--text-secondary)'
+                    }}>
+                      <ChevronDown size={16} />
+                    </div>
+                  </div>
                 </div>
 
                 {/* Start Date */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  <label className="neu-input-label">Start Date</label>
-                  <input
-                    type="date"
-                    value={dateStart}
-                    onChange={(e) => setDateStart(e.target.value)}
-                    style={{
-                      width: '100%',
-                      padding: '12px 16px',
-                      background: 'var(--bg-surface)',
-                      color: 'var(--text-primary)',
-                      border: '1px solid var(--border-color)',
-                      borderRadius: 'var(--border-radius-sm)',
-                      boxShadow: 'var(--neu-shadow-pressed-sm)',
-                      fontFamily: 'var(--font-sans)',
-                      fontSize: '0.95rem',
-                      outline: 'none'
-                    }}
-                  />
-                </div>
+                <NeuDatePicker
+                  label="Start Date"
+                  value={dateStart}
+                  onChange={setDateStart}
+                />
 
                 {/* End Date */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  <label className="neu-input-label">End Date</label>
-                  <input
-                    type="date"
-                    value={dateEnd}
-                    onChange={(e) => setDateEnd(e.target.value)}
-                    style={{
-                      width: '100%',
-                      padding: '12px 16px',
-                      background: 'var(--bg-surface)',
-                      color: 'var(--text-primary)',
-                      border: '1px solid var(--border-color)',
-                      borderRadius: 'var(--border-radius-sm)',
-                      boxShadow: 'var(--neu-shadow-pressed-sm)',
-                      fontFamily: 'var(--font-sans)',
-                      fontSize: '0.95rem',
-                      outline: 'none'
-                    }}
-                  />
-                </div>
+                <NeuDatePicker
+                  label="End Date"
+                  value={dateEnd}
+                  onChange={setDateEnd}
+                />
 
                 {/* Reset Filters */}
                 <div style={{ display: 'flex', alignItems: 'flex-end' }}>
@@ -831,6 +794,7 @@ export default function DashboardHome() {
                 disabled={updatingAdmin}
               />
               <NeuInput
+                type="password"
                 label="New Password"
                 placeholder="Enter new password"
                 value={adminPassword}
@@ -937,7 +901,9 @@ export default function DashboardHome() {
               />
 
               <NeuInput
+                type="password"
                 label="Password"
+                placeholder="••••••••"
                 value={editPassword}
                 onChange={(e) => setEditPassword(e.target.value)}
                 required

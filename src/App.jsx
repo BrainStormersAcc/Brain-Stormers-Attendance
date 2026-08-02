@@ -37,7 +37,31 @@ function App() {
             index 
             element={
               <ProtectedRoute requiredRole="admin">
-                <DashboardHome />
+                <DashboardHome view="overview" />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="staff-management" 
+            element={
+              <ProtectedRoute requiredRole="admin">
+                <DashboardHome view="staff" />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="attendance-records" 
+            element={
+              <ProtectedRoute requiredRole="admin">
+                <DashboardHome view="records" />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="admin-settings" 
+            element={
+              <ProtectedRoute requiredRole="admin">
+                <DashboardHome view="admin-settings" />
               </ProtectedRoute>
             } 
           />

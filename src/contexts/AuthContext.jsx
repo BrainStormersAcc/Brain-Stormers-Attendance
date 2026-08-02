@@ -125,6 +125,21 @@ export function AuthProvider({ children }) {
     return { success: true };
   };
 
+  // Update user profile avatar dynamically
+  const updateAvatar = async (avatar) => {
+    const user = auth.currentUser;
+    if (!user) throw new Error('No user is currently authenticated.');
+
+    const userDocRef = doc(db, 'users', user.uid);
+    await updateDoc(userDocRef, { avatar });
+
+    // Sync updates to local state profile
+    setUserProfile(prev => ({
+      ...prev,
+      avatar
+    }));
+  };
+
   const value = {
     currentUser,
     userProfile,
@@ -134,8 +149,10 @@ export function AuthProvider({ children }) {
     login,
     logout,
     changePassword,
-    updateAdminProfile
+    updateAdminProfile,
+    updateAvatar
   };
+
 
 
   return (

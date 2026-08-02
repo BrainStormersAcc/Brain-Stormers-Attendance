@@ -6,7 +6,8 @@ import {
   AlertCircle, 
   WifiOff, 
   RefreshCw, 
-  Filter 
+  Filter,
+  ChevronDown
 } from 'lucide-react';
 import NeuCard from '../../../shared/components/NeuCard.jsx';
 import NeuButton from '../../../shared/components/NeuButton.jsx';
@@ -381,26 +382,43 @@ export default function StaffDashboard() {
             {/* Month Filter */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <Filter size={16} style={{ color: 'var(--color-primary)' }} />
-              <select 
-                value={selectedMonth}
-                onChange={(e) => setSelectedMonth(e.target.value)}
-                style={{
-                  padding: '8px 12px',
-                  background: 'var(--bg-surface)',
-                  color: 'var(--text-primary)',
-                  border: '1px solid var(--border-color)',
-                  borderRadius: 'var(--border-radius-sm)',
-                  boxShadow: 'var(--neu-shadow-pressed-sm)',
-                  fontFamily: 'var(--font-sans)',
-                  fontSize: '0.85rem',
-                  outline: 'none'
-                }}
-              >
-                <option value="">All Months</option>
-                {months.map(m => (
-                  <option key={m.value} value={m.value}>{m.name}</option>
-                ))}
-              </select>
+              <div style={{ position: 'relative' }}>
+                <select 
+                  value={selectedMonth}
+                  onChange={(e) => setSelectedMonth(e.target.value)}
+                  style={{
+                    padding: '8px 32px 8px 12px',
+                    background: 'var(--bg-surface)',
+                    color: 'var(--text-primary)',
+                    border: '1px solid var(--border-color)',
+                    borderRadius: 'var(--border-radius-sm)',
+                    boxShadow: 'var(--neu-shadow-pressed-sm)',
+                    fontFamily: 'var(--font-sans)',
+                    fontSize: '0.85rem',
+                    outline: 'none',
+                    appearance: 'none',
+                    WebkitAppearance: 'none',
+                    MozAppearance: 'none'
+                  }}
+                >
+                  <option value="">All Months</option>
+                  {months.map(m => (
+                    <option key={m.value} value={m.value}>{m.name}</option>
+                  ))}
+                </select>
+                <div style={{
+                  position: 'absolute',
+                  right: '10px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  pointerEvents: 'none',
+                  color: 'var(--text-secondary)'
+                }}>
+                  <ChevronDown size={14} />
+                </div>
+              </div>
             </div>
           </div>
 
