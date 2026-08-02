@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext.jsx';
 import NeuCard from '../shared/components/NeuCard.jsx';
 import NeuInput from '../shared/components/NeuInput.jsx';
 import NeuButton from '../shared/components/NeuButton.jsx';
+import NeuThemeToggle from '../shared/components/NeuThemeToggle.jsx';
 import { Mail, Lock } from 'lucide-react';
 import { db } from '../config/firebase.js';
 import { doc, getDoc } from 'firebase/firestore';
@@ -59,8 +60,15 @@ export default function Login() {
       minHeight: '100vh',
       padding: '20px',
       backgroundColor: 'var(--bg-base)',
-      transition: 'background var(--transition-normal)'
+      transition: 'background var(--transition-normal)',
+      position: 'relative'
     }} className="animate-fade-in">
+      
+      {/* Top right theme toggle */}
+      <div style={{ position: 'absolute', top: '24px', right: '24px', zIndex: 100 }}>
+        <NeuThemeToggle />
+      </div>
+
       <NeuCard variant="raised" style={{ width: '100%', maxWidth: '420px', padding: '40px' }}>
         <div style={{ textAlign: 'center', marginBottom: '32px' }}>
           <h2 style={{ fontSize: '2rem', fontFamily: 'var(--font-display)', marginBottom: '8px' }}>Brain Stormers</h2>
@@ -84,9 +92,9 @@ export default function Login() {
 
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
           <NeuInput
-            label="Email Address"
-            type="email"
-            placeholder="name@brainstormers.com"
+            label="Username"
+            type="text"
+            placeholder="Enter username or email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required

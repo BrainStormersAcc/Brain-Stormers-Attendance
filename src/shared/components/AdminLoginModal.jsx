@@ -129,9 +129,9 @@ export default function AdminLoginModal() {
         {/* Login Form */}
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
           <NeuInput
-            label="Admin Email"
-            type="email"
-            placeholder="admin@brainstormers.com"
+            label="Admin Username"
+            type="text"
+            placeholder="admin"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
