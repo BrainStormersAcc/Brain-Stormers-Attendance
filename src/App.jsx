@@ -6,6 +6,7 @@ import Login from './pages/Login';
 import DashboardLayout from './shared/components/DashboardLayout';
 import DashboardHome from './pages/DashboardHome';
 import NotFound from './pages/NotFound';
+import StyleGuide from './pages/StyleGuide';
 
 // Module Pages
 import StaffDashboard from './modules/staff-attendance/pages/StaffDashboard';
@@ -20,6 +21,9 @@ function App() {
         {/* Protected Dashboard Layout wrapping page views */}
         <Route path="/" element={<DashboardLayout />}>
           <Route index element={<DashboardHome />} />
+          
+          {/* Style Guide Sandbox Route */}
+          <Route path="style-guide" element={<StyleGuide />} />
           
           {/* Module-Specific Route */}
           <Route path="staff-attendance/*" element={<StaffDashboard />} />

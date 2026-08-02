@@ -1,43 +1,34 @@
-/* Design System Variables & Theme */
+@import './theme.css';
+@import './neumorphism.css';
+
+/* Fallback default theme variables to root in case data-theme is not set yet */
 :root {
-  /* Color Palette (Modern Dark / Slate UI) */
-  --bg-primary: #090d16;
-  --bg-secondary: #0f172a;
-  --bg-card: rgba(30, 41, 59, 0.4);
-  --bg-card-hover: rgba(30, 41, 59, 0.6);
+  /* Defaulting to Light Theme values */
+  --bg-base: #e6e9ef;
+  --bg-surface: #e6e9ef;
+  --bg-surface-elevated: #eef2f7;
   
-  --border-color: rgba(255, 255, 255, 0.08);
-  --border-color-focus: rgba(99, 102, 241, 0.4);
+  --color-primary: #3b4b6b;
+  --color-primary-hover: #2f3c56;
+  --color-primary-glow: rgba(59, 75, 107, 0.15);
   
-  --text-primary: #f8fafc;
-  --text-secondary: #94a3b8;
-  --text-muted: #64748b;
+  --color-accent: #6b21a8;
+  --color-accent-hover: #581c87;
+  --color-accent-glow: rgba(107, 33, 168, 0.15);
+
+  --color-success: #047857;
+  --color-warning: #b45309;
+  --color-danger: #be123c;
+
+  --text-primary: #2e3542;
+  --text-secondary: #5a6474;
+  --text-muted: #8e9aa8;
   
-  /* Brand/Accent Colors */
-  --color-primary: #6366f1; /* Indigo */
-  --color-primary-hover: #4f46e5;
-  --color-primary-glow: rgba(99, 102, 241, 0.15);
-  
-  --color-accent: #a855f7; /* Purple */
-  --color-accent-hover: #9333ea;
-  
-  --color-success: #10b981; /* Emerald */
-  --color-warning: #f59e0b; /* Amber */
-  --color-danger: #ef4444;  /* Rose */
-  
-  /* Layout & Spacing */
-  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
-  --font-display: 'Outfit', var(--font-sans);
-  
-  --border-radius-sm: 8px;
-  --border-radius-md: 12px;
-  --border-radius-lg: 16px;
-  --border-radius-full: 9999px;
-  
-  --transition-fast: 0.15s ease;
-  --transition-normal: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  
-  --glass-blur: 12px;
+  --border-color: rgba(255, 255, 255, 0.5);
+  --border-color-focus: rgba(59, 75, 107, 0.3);
+
+  --color-shadow-light: #ffffff;
+  --color-shadow-dark: #c3c7d0;
 }
 
 /* Base resets */
@@ -48,7 +39,7 @@
 }
 
 body {
-  background-color: var(--bg-primary);
+  background-color: var(--bg-base);
   color: var(--text-primary);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
@@ -56,6 +47,7 @@ body {
   min-height: 100vh;
   line-height: 1.5;
   overflow-x: hidden;
+  transition: background-color var(--transition-normal), color var(--transition-normal);
 }
 
 h1, h2, h3, h4, h5, h6 {
@@ -63,6 +55,7 @@ h1, h2, h3, h4, h5, h6 {
   font-weight: 600;
   letter-spacing: -0.02em;
   color: var(--text-primary);
+  transition: color var(--transition-normal);
 }
 
 a {
@@ -75,19 +68,17 @@ a:hover {
   color: var(--color-primary-hover);
 }
 
-/* Glassmorphism utility card */
+/* Glassmorphism/Neumorphic utility card */
 .glass-panel {
-  background: var(--bg-card);
-  backdrop-filter: blur(var(--glass-blur));
-  -webkit-backdrop-filter: blur(var(--glass-blur));
+  background: var(--bg-surface);
   border: 1px solid var(--border-color);
   border-radius: var(--border-radius-md);
-  transition: border-color var(--transition-normal), background var(--transition-normal), transform var(--transition-normal);
+  box-shadow: var(--neu-shadow-raised);
+  transition: box-shadow var(--transition-normal), background-color var(--transition-normal), border-color var(--transition-normal);
 }
 
 .glass-panel:hover {
-  background: var(--bg-card-hover);
-  border-color: rgba(255, 255, 255, 0.12);
+  background: var(--bg-surface-elevated);
 }
 
 /* Custom Scrollbar */
@@ -97,11 +88,11 @@ a:hover {
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--bg-primary);
+  background: var(--bg-base);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--border-color);
+  background: var(--color-shadow-dark);
   border-radius: var(--border-radius-full);
 }
 
@@ -129,22 +120,24 @@ a:hover {
 .glow-btn {
   position: relative;
   overflow: hidden;
-  background: var(--color-primary);
-  color: #fff;
-  border: none;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
   border-radius: var(--border-radius-sm);
+  box-shadow: var(--neu-shadow-raised-sm);
   padding: 10px 20px;
   font-weight: 500;
   cursor: pointer;
-  transition: background var(--transition-fast), transform var(--transition-fast);
+  transition: box-shadow var(--transition-fast), background-color var(--transition-fast), transform var(--transition-fast), color var(--transition-fast);
 }
 
 .glow-btn:hover {
-  background: var(--color-primary-hover);
-  box-shadow: 0 0 20px var(--color-primary-glow);
+  background: var(--bg-surface-elevated);
   transform: translateY(-1px);
 }
 
 .glow-btn:active {
+  box-shadow: var(--neu-shadow-pressed-sm);
   transform: translateY(0);
 }
+

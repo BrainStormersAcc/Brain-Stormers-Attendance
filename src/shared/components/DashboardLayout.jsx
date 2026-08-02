@@ -9,8 +9,10 @@ import {
   X, 
   Wifi, 
   WifiOff, 
-  Clock 
+  Clock,
+  Settings
 } from 'lucide-react';
+import NeuThemeToggle from './NeuThemeToggle';
 
 function DashboardLayout() {
   const location = useLocation();
@@ -33,16 +35,17 @@ function DashboardLayout() {
   const navItems = [
     { name: 'Dashboard', path: '/', icon: LayoutDashboard },
     { name: 'Staff Attendance', path: '/staff-attendance', icon: Clock },
+    { name: 'Style Guide', path: '/style-guide', icon: Settings },
     { name: 'Student Portal (Future)', path: '#', icon: GraduationCap, disabled: true },
     { name: 'Teacher Portal (Future)', path: '#', icon: Users, disabled: true },
   ];
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--bg-primary)' }}>
+    <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--bg-base)', transition: 'background var(--transition-normal)' }}>
       {/* Sidebar - Desktop */}
       <aside style={{
         width: '280px',
-        backgroundColor: 'var(--bg-secondary)',
+        backgroundColor: 'var(--bg-surface)',
         borderRight: '1px solid var(--border-color)',
         display: 'flex',
         flexDirection: 'column',
@@ -168,7 +171,7 @@ function DashboardLayout() {
         {/* Top Header */}
         <header style={{
           height: '70px',
-          backgroundColor: 'var(--bg-secondary)',
+          backgroundColor: 'var(--bg-surface)',
           borderBottom: '1px solid var(--border-color)',
           padding: '0 24px',
           display: 'flex',
@@ -193,7 +196,10 @@ function DashboardLayout() {
             <Menu size={24} />
           </button>
 
-          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '16px' }}>
+          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '20px' }}>
+            {/* Theme Toggle */}
+            <NeuThemeToggle />
+
             {/* PWA Connection Status */}
             <div style={{
               display: 'flex',

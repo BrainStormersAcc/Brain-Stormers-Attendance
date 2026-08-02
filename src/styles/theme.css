@@ -1,0 +1,88 @@
+/* Neumorphism Premium Design System - Theme Tokens */
+
+/* Define light theme variables */
+html[data-theme="light"] {
+  --bg-base: #e6e9ef;
+  --bg-surface: #e6e9ef;
+  --bg-surface-elevated: #eef2f7;
+  
+  --color-primary: #3b4b6b; /* Premium deep navy/indigo */
+  --color-primary-hover: #2f3c56;
+  --color-primary-glow: rgba(59, 75, 107, 0.15);
+  
+  --color-accent: #6b21a8; /* Premium deep purple */
+  --color-accent-hover: #581c87;
+  --color-accent-glow: rgba(107, 33, 168, 0.15);
+
+  --color-success: #047857; /* Refined emerald */
+  --color-warning: #b45309; /* Refined amber */
+  --color-danger: #be123c;  /* Refined rose */
+
+  --text-primary: #2e3542; /* Charcoal */
+  --text-secondary: #5a6474; /* Soft charcoal */
+  --text-muted: #8e9aa8;
+  
+  --border-color: rgba(255, 255, 255, 0.5);
+  --border-color-focus: rgba(59, 75, 107, 0.3);
+
+  /* Shadows for Neumorphism (Soft dual shadow) */
+  --color-shadow-light: #ffffff;
+  --color-shadow-dark: #c3c7d0;
+}
+
+/* Define dark theme variables */
+html[data-theme="dark"] {
+  --bg-base: #1c1f26; /* Deep graphite */
+  --bg-surface: #1c1f26;
+  --bg-surface-elevated: #22262e;
+
+  --color-primary: #8a9ab8; /* Desaturated premium version of deep navy/indigo */
+  --color-primary-hover: #9fb0cf;
+  --color-primary-glow: rgba(138, 154, 184, 0.15);
+
+  --color-accent: #c084fc; /* Desaturated purple */
+  --color-accent-hover: #d8b4fe;
+  --color-accent-glow: rgba(192, 132, 252, 0.15);
+
+  --color-success: #34d399; /* Bright emerald */
+  --color-warning: #fbbf24; /* Bright amber */
+  --color-danger: #f87171;  /* Bright rose */
+
+  --text-primary: #e2e8f0; /* Off-white */
+  --text-secondary: #94a3b8; /* Medium gray */
+  --text-muted: #64748b;
+
+  --border-color: rgba(255, 255, 255, 0.03);
+  --border-color-focus: rgba(138, 154, 184, 0.4);
+
+  /* Shadows for Neumorphism (Lower contrast than light mode to prevent muddiness) */
+  --color-shadow-light: #252932;
+  --color-shadow-dark: #13151a;
+}
+
+/* Global variables and compound variables */
+:root {
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-display: 'Outfit', var(--font-sans);
+
+  --border-radius-sm: 12px;
+  --border-radius-md: 20px;
+  --border-radius-lg: 28px;
+  --border-radius-full: 9999px;
+
+  --transition-fast: 0.15s ease;
+  --transition-normal: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-slow: 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Centralized Neumorphic Shadow tokens */
+:root {
+  --neu-shadow-raised: -8px -8px 16px var(--color-shadow-light), 8px 8px 16px var(--color-shadow-dark);
+  --neu-shadow-pressed: inset -8px -8px 16px var(--color-shadow-light), inset 8px 8px 16px var(--color-shadow-dark);
+  
+  --neu-shadow-raised-sm: -4px -4px 8px var(--color-shadow-light), 4px 4px 8px var(--color-shadow-dark);
+  --neu-shadow-pressed-sm: inset -4px -4px 8px var(--color-shadow-light), inset 4px 4px 8px var(--color-shadow-dark);
+
+  --neu-shadow-raised-lg: -12px -12px 24px var(--color-shadow-light), 12px 12px 24px var(--color-shadow-dark);
+  --neu-shadow-pressed-lg: inset -12px -12px 24px var(--color-shadow-light), inset 12px 12px 24px var(--color-shadow-dark);
+}
