@@ -87,17 +87,22 @@ Tracks daily attendance check-ins and check-outs.
 
 ### B. Database Security Rules (CRITICAL)
 
-Access control must be enforced at the database layer. Firestore Security Rules dictate the following security properties:
+Access control is enforced at the database layer using Firestore Security Rules, which reside in the project's root [firestore.rules](file:///c:/Users/niaz/Desktop/Brain-Stormers/Projects/Brain-Stormers-Attendance/firestore.rules) file.
 
-1.  **No Test Mode in Production:** Collections must never be left with open read/write rules (`allow read, write: if true;`).
-2.  **Staff Data Isolation:** Staff members can only read and write their own attendance records. They must not have read or write access to other staff members' data.
-3.  **Admin Auth Scope:** Only users with the `"admin"` role are authorized to create, update, or delete documents in the `users` collection.
-4.  **Admin Attendance Scope:** Only users with the `"admin"` role can read attendance records belonging to other users.
-5.  **Minimum Authentication:** All writes to any collection require the request to be authenticated at minimum (`request.auth != null`), followed by validation of matching roles or user IDs.
-6.  **Rule Integration Workflow:** Real Firestore Security Rules must be reviewed and deployed from the project file (`firestore.rules`) every time a new collection or field is introduced.
-7.  **UX vs. Security Boundary:** 
+Key security controls enforced:
+1.  **No Open Access:** No collection is left in test mode or open to the public. All operations require user authentication (`request.auth != null`).
+2.  **User Profiles Security (`/users/{userId}`):**
+    *   **Read:** Any authenticated user can read their own profile document. Only users with the `"admin"` role can read profiles belonging to other users.
+    *   **Write (Create, Update, Delete):** Restricted exclusively to users with the `"admin"` role.
+3.  **Attendance Record Isolation (`/attendance/{attendanceId}`):**
+    *   **Create:** Requester must be signed in, and the `userId` in the created record must match their authenticated UID (preventing staff from creating logs for others).
+    *   **Read:** Staff users can only read logs matching their own `userId`. Admins can read all logs.
+    *   **Update:** Staff can only update their own records and are strictly restricted to modifying the `checkOut` and `status` fields (using the rules `diff().affectedKeys()` validation). Admins can update any field.
+    *   **Delete:** Restricted exclusively to users with the `"admin"` role.
+4.  **Role Verification Helper:** Rules utilize a reusable `isAdmin()` lookup that reads `/users/$(request.auth.uid)` to verify roles securely.
+5.  **UX vs. Security Boundary:** 
     > [!IMPORTANT]
-    > Client-side checks (e.g., hiding buttons or blocking paths in React Router) are for **UX only**. Real data protection must happen in `firestore.rules`. Never rely on frontend logic to secure the database.
+    > Client-side checks (e.g., hiding buttons or blocking paths in React Router) are for **UX only**. Real data protection happens in `firestore.rules`. Never rely on frontend logic to secure the database.
 
 ---
 

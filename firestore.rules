@@ -1,11 +1,59 @@
 rules_version = '2';
 
+// =========================================================================
+// FIRESTORE SECURITY RULES CHECKLIST & MODEL:
+// =========================================================================
+// [x] Helper functions:
+//     - isSignedIn(): Enforces request.auth != null globally.
+//     - isAdmin(): Validates if the authenticated user's role is "admin"
+//                  via cross-document lookup to /users/{uid}.
+//
+// [x] /users/{userId} collection rules:
+//     - READ: Any authenticated user can read their own user document.
+//             Admin can read any user document.
+//     - WRITE (Create, Update, Delete): Restricted exclusively to "admin" role.
+//
+// [x] /attendance/{attendanceId} collection rules:
+//     - CREATE: Requester must be signed in, and the document's userId 
+//               field must match their authenticated uid.
+//     - READ: Requester must be signed in, and can only read documents where 
+//             userId matches their authenticated uid. Admins can read all logs.
+//     - UPDATE: Requester must be signed in. Staff can only update their own 
+//               document and only the 'checkOut' and 'status' fields.
+//               Admins can update any fields.
+//     - DELETE: Restricted exclusively to "admin" role.
+// =========================================================================
+
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /{document=**} {
-      // By default, require authentication for read/write.
-      // This is a secure fallback boilerplate that can be customized.
-      allow read, write: if request.auth != null;
+
+    // Reusable helper checking if user is authenticated
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Reusable helper checking if user is an admin by querying user document
+    function isAdmin() {
+      return isSignedIn() &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin";
+    }
+
+    // Rules for users collection
+    match /users/{userId} {
+      allow read: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      allow write: if isAdmin();
+    }
+
+    // Rules for attendance collection
+    match /attendance/{attendanceId} {
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow update: if isSignedIn() && (
+        isAdmin() || 
+        (resource.data.userId == request.auth.uid && 
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['checkOut', 'status']))
+      );
+      allow delete: if isAdmin();
     }
   }
 }
