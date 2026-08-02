@@ -6,9 +6,10 @@ import {
   signOut, 
   EmailAuthProvider, 
   reauthenticateWithCredential, 
-  updatePassword 
+  updatePassword,
+  updateEmail
 } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc } from 'firebase/firestore';
 
 const AuthContext = createContext();
 
@@ -60,8 +61,10 @@ export function AuthProvider({ children }) {
 
   // Login handler
   const login = async (email, password) => {
-    return signInWithEmailAndPassword(auth, email, password);
+    const authEmail = email.includes('@') ? email : `${email}@brainstormers.internal`;
+    return signInWithEmailAndPassword(auth, authEmail, password);
   };
+
 
   // Logout handler
   const logout = async () => {
@@ -81,6 +84,47 @@ export function AuthProvider({ children }) {
     return updatePassword(user, newPassword);
   };
 
+  // Update admin credentials and profile details dynamically
+  const updateAdminProfile = async (currentPassword, { name, username, phone, password }) => {
+    const user = auth.currentUser;
+    if (!user) throw new Error('No user is currently authenticated.');
+
+    // 1. Reauthenticate user
+    const credential = EmailAuthProvider.credential(user.email, currentPassword);
+    await reauthenticateWithCredential(user, credential);
+
+    // 2. Update email in Auth if changed
+    const newAuthEmail = username.includes('@') ? username : `${username}@brainstormers.internal`;
+    if (newAuthEmail !== user.email) {
+      await updateEmail(user, newAuthEmail);
+    }
+
+    // 3. Update password in Auth if changed
+    if (password !== userProfile.password) {
+      await updatePassword(user, password);
+    }
+
+    // 4. Update Firestore profile document
+    const userDocRef = doc(db, 'users', user.uid);
+    await updateDoc(userDocRef, {
+      name,
+      username,
+      phone,
+      password
+    });
+
+    // 5. Sync updates to local state profile
+    setUserProfile(prev => ({
+      ...prev,
+      name,
+      username,
+      phone,
+      password
+    }));
+
+    return { success: true };
+  };
+
   const value = {
     currentUser,
     userProfile,
@@ -89,8 +133,10 @@ export function AuthProvider({ children }) {
     setIsAdminModalOpen,
     login,
     logout,
-    changePassword
+    changePassword,
+    updateAdminProfile
   };
+
 
   return (
     <AuthContext.Provider value={value}>

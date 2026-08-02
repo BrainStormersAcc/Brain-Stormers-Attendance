@@ -1,30 +1,61 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth, createUserWithEmailAndPassword, signOut } from 'firebase/auth';
-import { doc, setDoc, updateDoc, collection, getDocs, query, where, serverTimestamp } from 'firebase/firestore';
+import { 
+  getAuth, 
+  createUserWithEmailAndPassword, 
+  signInWithEmailAndPassword,
+  updateEmail,
+  updatePassword,
+  deleteUser,
+  signOut 
+} from 'firebase/auth';
+import { 
+  doc, 
+  setDoc, 
+  updateDoc, 
+  deleteDoc,
+  collection, 
+  getDocs, 
+  query, 
+  where, 
+  serverTimestamp 
+} from 'firebase/firestore';
 import { db, firebaseConfig } from '../config/firebase.js';
+
+// Helper to convert plain username or email into standard email format for Firebase Auth
+export const formatUsernameToEmail = (username) => {
+  if (!username) return '';
+  if (username.includes('@')) {
+    return username; // If it's already an email, return as-is
+  }
+  // Internally append domain to support non-email plain usernames
+  return `${username}@brainstormers.internal`;
+};
 
 // Helper to create a staff user in Auth and Firestore without logging the current Admin out
 export const createStaffAccount = async ({ name, username, phone, password }) => {
-  // Initialize a secondary Firebase application context dynamically to prevent session collision
   const appName = `TempRegisterApp-${Math.random().toString(36).substr(2, 9)}`;
   const tempApp = initializeApp(firebaseConfig, appName);
   const tempAuth = getAuth(tempApp);
 
   try {
-    // Create credential
-    const userCredential = await createUserWithEmailAndPassword(tempAuth, username, password);
+    // 1. Format username to valid email internally for Firebase Auth
+    const authEmail = formatUsernameToEmail(username);
+
+    // 2. Create credential
+    const userCredential = await createUserWithEmailAndPassword(tempAuth, authEmail, password);
     const user = userCredential.user;
     
-    // Clear session on secondary auth app context
+    // 3. Clear session on temporary app context
     await signOut(tempAuth);
 
-    // Create profile document in Firestore users collection
+    // 4. Create profile document in Firestore users collection (storing credentials)
     const userDocRef = doc(db, 'users', user.uid);
     await setDoc(userDocRef, {
       name,
       role: 'staff',
-      username, // username matches their Email/Login
+      username, // Storing raw username
       phone,
+      password, // Storing password so Admin can see and edit
       joinDate: serverTimestamp(),
       active: true
     });
@@ -48,11 +79,10 @@ export const getAllStaff = async () => {
       staffList.push({ uid: doc.id, ...doc.data() });
     });
     
-    // Sort by name or join date
     return staffList.sort((a, b) => {
       const dateA = a.joinDate?.seconds || 0;
       const dateB = b.joinDate?.seconds || 0;
-      return dateB - dateA; // Newest first
+      return dateB - dateA;
     });
   } catch (error) {
     console.error('Error in getAllStaff:', error);
@@ -71,14 +101,89 @@ export const toggleStaffStatus = async (uid, active) => {
   }
 };
 
-// Edit staff info in Firestore users collection
-export const editStaffInfo = async (uid, { name, phone }) => {
+// Edit staff info and credentials in Firestore and Firebase Auth
+export const editStaffCredentials = async (uid, oldUsername, oldPassword, { name, username, phone, password }) => {
+  const appName = `TempEditApp-${Math.random().toString(36).substr(2, 9)}`;
+  const tempApp = initializeApp(firebaseConfig, appName);
+  const tempAuth = getAuth(tempApp);
+
   try {
+    // Determine if auth updates are necessary
+    const usernameChanged = username !== oldUsername;
+    const passwordChanged = password !== oldPassword;
+
+    if (usernameChanged || passwordChanged) {
+      // 1. Sign in as the staff member to gain edit capability
+      const oldAuthEmail = formatUsernameToEmail(oldUsername);
+      const userCredential = await signInWithEmailAndPassword(tempAuth, oldAuthEmail, oldPassword);
+      const user = userCredential.user;
+
+      // 2. Apply email update if username changed
+      if (usernameChanged) {
+        const newAuthEmail = formatUsernameToEmail(username);
+        await updateEmail(user, newAuthEmail);
+      }
+
+      // 3. Apply password update if password changed
+      if (passwordChanged) {
+        await updatePassword(user, password);
+      }
+
+      // 4. Sign out temporary instance
+      await signOut(tempAuth);
+    }
+
+    // 5. Update Firestore user document
     const userDocRef = doc(db, 'users', uid);
-    return updateDoc(userDocRef, { name, phone });
+    await updateDoc(userDocRef, {
+      name,
+      username,
+      phone,
+      password
+    });
+
+    return { success: true };
   } catch (error) {
-    console.error('Error in editStaffInfo:', error);
+    console.error('Error in editStaffCredentials:', error);
     throw error;
+  }
+};
+
+// Delete staff account in Firestore and Firebase Auth
+export const deleteStaffAccount = async (uid, username, password) => {
+  const appName = `TempDeleteApp-${Math.random().toString(36).substr(2, 9)}`;
+  const tempApp = initializeApp(firebaseConfig, appName);
+  const tempAuth = getAuth(tempApp);
+
+  try {
+    // 1. Sign in as the staff member
+    const authEmail = formatUsernameToEmail(username);
+    const userCredential = await signInWithEmailAndPassword(tempAuth, authEmail, password);
+    const user = userCredential.user;
+
+    // 2. Delete Auth record
+    await deleteUser(user);
+
+    // 3. Sign out temporary app
+    await signOut(tempAuth);
+
+    // 4. Delete Firestore profile document
+    const userDocRef = doc(db, 'users', uid);
+    await deleteDoc(userDocRef);
+
+    return { success: true };
+  } catch (error) {
+    console.error('Error in deleteStaffAccount, attempting Firestore fallback delete:', error);
+    
+    // Fallback: If Auth deletion fails (e.g. user was deleted from Auth manually), still delete Firestore document
+    try {
+      const userDocRef = doc(db, 'users', uid);
+      await deleteDoc(userDocRef);
+      return { success: true, firestoreOnly: true };
+    } catch (dbError) {
+      console.error('Failed to delete Firestore document after Auth fail:', dbError);
+      throw dbError;
+    }
   }
 };
 
@@ -99,4 +204,3 @@ export const getAllAttendance = async () => {
     throw error;
   }
 };
-

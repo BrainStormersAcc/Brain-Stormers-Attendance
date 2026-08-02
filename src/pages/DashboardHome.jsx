@@ -12,7 +12,10 @@ import {
   Filter, 
   Info,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  Trash2,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import NeuCard from '../shared/components/NeuCard.jsx';
 import NeuButton from '../shared/components/NeuButton.jsx';
@@ -23,22 +26,71 @@ import {
   createStaffAccount, 
   getAllStaff, 
   toggleStaffStatus, 
-  editStaffInfo, 
+  editStaffCredentials,
+  deleteStaffAccount,
   getAllAttendance 
 } from '../services/adminService.js';
+import { useAuth } from '../contexts/AuthContext.jsx';
 
 export default function DashboardHome() {
-  const [activeTab, setActiveTab] = useState('overview'); // 'overview' | 'staff' | 'records'
+  const [activeTab, setActiveTab] = useState('overview'); // 'overview' | 'staff' | 'records' | 'admin-settings'
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
+  // Admin settings states
+  const { userProfile, updateAdminProfile } = useAuth();
+  const [adminName, setAdminName] = useState(userProfile?.name || '');
+  const [adminUsername, setAdminUsername] = useState(userProfile?.username || '');
+  const [adminPhone, setAdminPhone] = useState(userProfile?.phone || '');
+  const [adminPassword, setAdminPassword] = useState(userProfile?.password || '');
+  const [adminCurrentPassword, setAdminCurrentPassword] = useState('');
+  const [updatingAdmin, setUpdatingAdmin] = useState(false);
+
+  useEffect(() => {
+    if (userProfile) {
+      setAdminName(userProfile.name || '');
+      setAdminUsername(userProfile.username || '');
+      setAdminPhone(userProfile.phone || '');
+      setAdminPassword(userProfile.password || '');
+    }
+  }, [userProfile]);
+
+  const handleUpdateAdminProfile = async (e) => {
+    e.preventDefault();
+    setUpdatingAdmin(true);
+    setError('');
+    setSuccess('');
+
+    try {
+      await updateAdminProfile(adminCurrentPassword, {
+        name: adminName,
+        username: adminUsername,
+        phone: adminPhone,
+        password: adminPassword
+      });
+      setSuccess('Admin account credentials updated successfully.');
+      setAdminCurrentPassword('');
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (err) {
+      console.error('Admin profile update failed:', err);
+      if (err.code === 'auth/wrong-password') {
+        setError('Incorrect current password.');
+      } else {
+        setError(err.message || 'Failed to update admin profile.');
+      }
+    } finally {
+      setUpdatingAdmin(false);
+    }
+  };
+
   // Staff list & Directory state
   const [staffList, setStaffList] = useState([]);
+  const [visiblePasswords, setVisiblePasswords] = useState({}); // maps uid -> boolean
   
   // Create Staff Form State
   const [fullName, setFullName] = useState('');
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(''); // username/email
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [copySuccess, setCopySuccess] = useState(false);
@@ -47,8 +99,14 @@ export default function DashboardHome() {
   // Edit Staff Modal State
   const [editingStaff, setEditingStaff] = useState(null); // holds staff object being edited
   const [editName, setEditName] = useState('');
+  const [editUsername, setEditUsername] = useState('');
   const [editPhone, setEditPhone] = useState('');
+  const [editPassword, setEditPassword] = useState('');
   const [updating, setUpdating] = useState(false);
+
+  // Delete Staff Confirmation State
+  const [deletingStaff, setDeletingStaff] = useState(null); // holds staff object to delete
+  const [deleting, setDeleting] = useState(false);
 
   // Attendance Records State
   const [attendanceLogs, setAttendanceLogs] = useState([]);
@@ -126,7 +184,7 @@ export default function DashboardHome() {
     } catch (err) {
       console.error('Registration failure:', err);
       if (err.code === 'auth/email-already-in-use') {
-        setError('This email address is already registered.');
+        setError('This username/email is already registered.');
       } else {
         setError(err.message || 'Failed to create staff account.');
       }
@@ -154,7 +212,6 @@ export default function DashboardHome() {
       const newStatus = !currentStatus;
       await toggleStaffStatus(uid, newStatus);
       
-      // Update local state directly to be responsive
       setStaffList(prev => prev.map(member => 
         member.uid === uid ? { ...member, active: newStatus } : member
       ));
@@ -164,25 +221,43 @@ export default function DashboardHome() {
     }
   };
 
+  // Toggle Password Visibility
+  const togglePasswordVisibility = (uid) => {
+    setVisiblePasswords(prev => ({
+      ...prev,
+      [uid]: !prev[uid]
+    }));
+  };
+
   // Open Edit Modal
   const openEditModal = (member) => {
     setEditingStaff(member);
     setEditName(member.name);
+    setEditUsername(member.username);
     setEditPhone(member.phone);
+    setEditPassword(member.password || '');
     setError('');
   };
 
-  // Submit Edit
+  // Submit Edit Credentials
   const handleUpdateStaff = async (e) => {
     e.preventDefault();
     setUpdating(true);
     setError('');
+    setSuccess('');
 
     try {
-      await editStaffInfo(editingStaff.uid, {
-        name: editName,
-        phone: editPhone
-      });
+      await editStaffCredentials(
+        editingStaff.uid,
+        editingStaff.username,
+        editingStaff.password,
+        {
+          name: editName,
+          username: editUsername,
+          phone: editPhone,
+          password: editPassword
+        }
+      );
 
       setSuccess('Staff details updated successfully.');
       setEditingStaff(null);
@@ -193,9 +268,37 @@ export default function DashboardHome() {
       setTimeout(() => setSuccess(''), 2000);
     } catch (err) {
       console.error('Update staff failure:', err);
-      setError('Failed to save changes.');
+      setError(err.message || 'Failed to update credentials.');
     } finally {
       setUpdating(false);
+    }
+  };
+
+  // Handle Account Deletion
+  const handleDeleteStaff = async () => {
+    setDeleting(true);
+    setError('');
+    setSuccess('');
+
+    try {
+      await deleteStaffAccount(
+        deletingStaff.uid,
+        deletingStaff.username,
+        deletingStaff.password
+      );
+
+      setSuccess(`Staff account "${deletingStaff.name}" deleted successfully.`);
+      setDeletingStaff(null);
+
+      // Refresh directory
+      const staff = await getAllStaff();
+      setStaffList(staff);
+      setTimeout(() => setSuccess(''), 2000);
+    } catch (err) {
+      console.error('Delete staff failure:', err);
+      setError(err.message || 'Failed to delete staff account.');
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -212,7 +315,7 @@ export default function DashboardHome() {
     return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
   };
 
-  // Mock statistics for Overview tab
+  // Stats calculation
   const activeStaffCount = staffList.filter(s => s.active).length;
   const presentCount = attendanceLogs.filter(log => {
     const today = new Date().toISOString().split('T')[0];
@@ -276,13 +379,19 @@ export default function DashboardHome() {
           variant={activeTab === 'staff' ? 'accent' : 'normal'}
           onClick={() => setActiveTab('staff')}
         >
-          Manage Staff
+          Staff Account Management
         </NeuButton>
         <NeuButton 
           variant={activeTab === 'records' ? 'accent' : 'normal'}
           onClick={() => setActiveTab('records')}
         >
           Attendance Records
+        </NeuButton>
+        <NeuButton 
+          variant={activeTab === 'admin-settings' ? 'accent' : 'normal'}
+          onClick={() => setActiveTab('admin-settings')}
+        >
+          Admin Settings
         </NeuButton>
       </div>
 
@@ -361,13 +470,13 @@ export default function DashboardHome() {
             <NeuCard variant="raised" style={{ padding: '32px' }}>
               <h3 style={{ fontSize: '1.25rem', marginBottom: '12px', fontFamily: 'var(--font-display)' }}>System Instructions</h3>
               <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', maxWidth: '800px', lineHeight: '1.6' }}>
-                This is your administrative console. Click **Manage Staff** to add or edit coaching center workers. Switch to **Attendance Records** to filter and inspect logged times. Attendance updates log automatically in real-time as users check-in.
+                This is your administrative console. Click **Staff Account Management** to add, edit, or delete staff credentials (usernames and passwords). Switch to **Attendance Records** to filter and inspect logged times.
               </p>
             </NeuCard>
           </div>
         )}
 
-        {/* VIEW: MANAGE STAFF */}
+        {/* VIEW: STAFF ACCOUNT MANAGEMENT */}
         {activeTab === 'staff' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
             
@@ -375,7 +484,7 @@ export default function DashboardHome() {
             <NeuCard variant="raised" style={{ padding: '32px' }}>
               <h3 style={{ fontSize: '1.25rem', marginBottom: '20px', fontFamily: 'var(--font-display)', display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Plus size={18} style={{ color: 'var(--color-primary)' }} />
-                <span>Register New Staff Account</span>
+                <span>Create Staff Account</span>
               </h3>
               
               <form onSubmit={handleRegisterStaff} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '20px', alignItems: 'end' }}>
@@ -388,9 +497,8 @@ export default function DashboardHome() {
                   disabled={creating}
                 />
                 <NeuInput
-                  label="Email (Username)"
-                  type="email"
-                  placeholder="name@brainstormers.com"
+                  label="Username"
+                  placeholder="e.g. jdoe or john@domain.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
@@ -439,11 +547,11 @@ export default function DashboardHome() {
               </form>
             </NeuCard>
 
-            {/* Staff Directory Directory */}
+            {/* Staff Directory */}
             <NeuCard variant="raised" style={{ padding: '32px', overflowX: 'auto' }}>
               <h3 style={{ fontSize: '1.25rem', marginBottom: '20px', fontFamily: 'var(--font-display)', display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Users size={18} style={{ color: 'var(--color-primary)' }} />
-                <span>Staff Members Directory</span>
+                <span>Staff Account Registry</span>
               </h3>
 
               {staffList.length === 0 ? (
@@ -451,11 +559,12 @@ export default function DashboardHome() {
                   No registered staff accounts found. Create one above.
                 </div>
               ) : (
-                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '700px' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '850px' }}>
                   <thead>
                     <tr style={{ borderBottom: '1px solid var(--border-color)', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
                       <th style={{ padding: '12px 16px' }}>Name</th>
-                      <th style={{ padding: '12px 16px' }}>Email (Username)</th>
+                      <th style={{ padding: '12px 16px' }}>Username</th>
+                      <th style={{ padding: '12px 16px' }}>Password</th>
                       <th style={{ padding: '12px 16px' }}>Phone</th>
                       <th style={{ padding: '12px 16px' }}>Join Date</th>
                       <th style={{ padding: '12px 16px', textAlign: 'center' }}>Active Status</th>
@@ -463,36 +572,67 @@ export default function DashboardHome() {
                     </tr>
                   </thead>
                   <tbody>
-                    {staffList.map((member) => (
-                      <tr 
-                        key={member.uid} 
-                        style={{ 
-                          borderBottom: '1px solid var(--border-color)', 
-                          fontSize: '0.95rem',
-                          opacity: member.active ? 1 : 0.6,
-                          transition: 'opacity var(--transition-normal)'
-                        }}
-                      >
-                        <td style={{ padding: '16px', fontWeight: 500 }}>{member.name}</td>
-                        <td style={{ padding: '16px', color: 'var(--text-secondary)' }}>{member.username}</td>
-                        <td style={{ padding: '16px' }}>{member.phone}</td>
-                        <td style={{ padding: '16px', color: 'var(--text-muted)' }}>{formatDate(member.joinDate)}</td>
-                        <td style={{ padding: '16px', textAlign: 'center' }}>
-                          <div style={{ display: 'inline-flex', justifyContent: 'center' }}>
-                            <NeuToggle
-                              checked={member.active}
-                              onChange={() => handleToggleActive(member.uid, member.active)}
-                            />
-                          </div>
-                        </td>
-                        <td style={{ padding: '16px', textAlign: 'right' }}>
-                          <NeuButton onClick={() => openEditModal(member)} style={{ padding: '8px 12px' }}>
-                            <Edit size={14} />
-                            <span style={{ fontSize: '0.8rem' }}>Edit</span>
-                          </NeuButton>
-                        </td>
-                      </tr>
-                    ))}
+                    {staffList.map((member) => {
+                      const isPassVisible = visiblePasswords[member.uid];
+                      return (
+                        <tr 
+                          key={member.uid} 
+                          style={{ 
+                            borderBottom: '1px solid var(--border-color)', 
+                            fontSize: '0.95rem',
+                            opacity: member.active ? 1 : 0.6,
+                            transition: 'opacity var(--transition-normal)'
+                          }}
+                        >
+                          <td style={{ padding: '16px', fontWeight: 500 }}>{member.name}</td>
+                          <td style={{ padding: '16px', color: 'var(--text-secondary)' }}>{member.username}</td>
+                          <td style={{ padding: '16px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <span>{isPassVisible ? (member.password || 'N/A') : '••••••••'}</span>
+                              <button 
+                                onClick={() => togglePasswordVisibility(member.uid)}
+                                style={{
+                                  background: 'none',
+                                  border: 'none',
+                                  cursor: 'pointer',
+                                  color: 'var(--text-muted)',
+                                  padding: 0,
+                                  display: 'flex',
+                                  alignItems: 'center'
+                                }}
+                              >
+                                {isPassVisible ? <EyeOff size={14} /> : <Eye size={14} />}
+                              </button>
+                            </div>
+                          </td>
+                          <td style={{ padding: '16px' }}>{member.phone}</td>
+                          <td style={{ padding: '16px', color: 'var(--text-muted)' }}>{formatDate(member.joinDate)}</td>
+                          <td style={{ padding: '16px', textAlign: 'center' }}>
+                            <div style={{ display: 'inline-flex', justifyContent: 'center' }}>
+                              <NeuToggle
+                                checked={member.active}
+                                onChange={() => handleToggleActive(member.uid, member.active)}
+                              />
+                            </div>
+                          </td>
+                          <td style={{ padding: '16px', textAlign: 'right' }}>
+                            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+                              <NeuButton onClick={() => openEditModal(member)} style={{ padding: '8px 12px' }}>
+                                <Edit size={14} />
+                                <span style={{ fontSize: '0.8rem' }}>Edit</span>
+                              </NeuButton>
+                              <NeuButton 
+                                onClick={() => setDeletingStaff(member)} 
+                                style={{ padding: '8px 12px', borderColor: 'rgba(239, 68, 68, 0.2)', color: 'var(--color-danger)' }}
+                              >
+                                <Trash2 size={14} />
+                                <span style={{ fontSize: '0.8rem' }}>Delete</span>
+                              </NeuButton>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               )}
@@ -629,7 +769,6 @@ export default function DashboardHome() {
                       const staffMember = staffList.find(s => s.uid === log.userId);
                       const name = staffMember ? staffMember.name : 'Unknown User';
                       
-                      // Status styling mapping
                       let statusColor = 'var(--text-primary)';
                       if (log.status === 'present') statusColor = 'var(--color-success)';
                       if (log.status === 'late') statusColor = 'var(--color-warning)';
@@ -658,9 +797,72 @@ export default function DashboardHome() {
           </div>
         )}
 
+        {/* VIEW: ADMIN SETTINGS */}
+        {activeTab === 'admin-settings' && (
+          <NeuCard variant="raised" style={{ padding: '32px', maxWidth: '600px', margin: '0 auto' }}>
+            <h3 style={{ fontSize: '1.25rem', marginBottom: '20px', fontFamily: 'var(--font-display)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Users size={18} style={{ color: 'var(--color-primary)' }} />
+              <span>Admin Profile & Credentials</span>
+            </h3>
+            
+            <form onSubmit={handleUpdateAdminProfile} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              <NeuInput
+                label="Full Name"
+                placeholder="e.g. Administrator"
+                value={adminName}
+                onChange={(e) => setAdminName(e.target.value)}
+                required
+                disabled={updatingAdmin}
+              />
+              <NeuInput
+                label="Username"
+                placeholder="e.g. admin"
+                value={adminUsername}
+                onChange={(e) => setAdminUsername(e.target.value)}
+                required
+                disabled={updatingAdmin}
+              />
+              <NeuInput
+                label="Phone Number"
+                placeholder="e.g. +1234567890"
+                value={adminPhone}
+                onChange={(e) => setAdminPhone(e.target.value)}
+                required
+                disabled={updatingAdmin}
+              />
+              <NeuInput
+                label="New Password"
+                placeholder="Enter new password"
+                value={adminPassword}
+                onChange={(e) => setAdminPassword(e.target.value)}
+                required
+                disabled={updatingAdmin}
+              />
+              
+              <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '20px', marginTop: '10px' }}>
+                <NeuInput
+                  type="password"
+                  label="Confirm Current Password"
+                  placeholder="Enter current password to apply changes"
+                  value={adminCurrentPassword}
+                  onChange={(e) => setAdminCurrentPassword(e.target.value)}
+                  required
+                  disabled={updatingAdmin}
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '10px' }}>
+                <NeuButton type="submit" variant="accent" disabled={updatingAdmin}>
+                  {updatingAdmin ? 'Saving Changes...' : 'Save Settings'}
+                </NeuButton>
+              </div>
+            </form>
+          </NeuCard>
+        )}
+
       </div>
 
-      {/* Edit Staff Details Overlay Modal */}
+      {/* Edit Staff Credentials Modal */}
       {editingStaff && (
         <div style={{
           position: 'fixed',
@@ -689,7 +891,6 @@ export default function DashboardHome() {
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Close Button */}
             <button 
               onClick={() => setEditingStaff(null)}
               style={{
@@ -705,10 +906,9 @@ export default function DashboardHome() {
               Cancel
             </button>
 
-            {/* Modal Title */}
             <div style={{ textAlign: 'center' }}>
-              <h3 style={{ fontSize: '1.5rem', fontFamily: 'var(--font-display)', marginBottom: '8px' }}>Edit Staff Details</h3>
-              <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>Update profile settings for {editingStaff.username}</p>
+              <h3 style={{ fontSize: '1.5rem', fontFamily: 'var(--font-display)', marginBottom: '8px' }}>Edit Staff Account</h3>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>Update credentials for {editingStaff.name}</p>
             </div>
 
             <form onSubmit={handleUpdateStaff} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -721,9 +921,25 @@ export default function DashboardHome() {
               />
               
               <NeuInput
+                label="Username"
+                value={editUsername}
+                onChange={(e) => setEditUsername(e.target.value)}
+                required
+                disabled={updating}
+              />
+
+              <NeuInput
                 label="Phone Number"
                 value={editPhone}
                 onChange={(e) => setEditPhone(e.target.value)}
+                required
+                disabled={updating}
+              />
+
+              <NeuInput
+                label="Password"
+                value={editPassword}
+                onChange={(e) => setEditPassword(e.target.value)}
                 required
                 disabled={updating}
               />
@@ -747,6 +963,71 @@ export default function DashboardHome() {
                 </NeuButton>
               </div>
             </form>
+          </NeuCard>
+        </div>
+      )}
+
+      {/* Delete Staff Confirmation Modal */}
+      {deletingStaff && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          backdropFilter: 'blur(8px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+          padding: '20px'
+        }} onClick={() => setDeletingStaff(null)}>
+          <NeuCard 
+            variant="raised" 
+            style={{
+              width: '100%',
+              maxWidth: '400px',
+              padding: '36px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '24px',
+              textAlign: 'center'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div>
+              <h3 style={{ fontSize: '1.5rem', fontFamily: 'var(--font-display)', marginBottom: '8px', color: 'var(--color-danger)' }}>
+                Delete Account
+              </h3>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
+                Are you sure you want to delete **{deletingStaff.name}**?
+              </p>
+            </div>
+
+            <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', lineHeight: '1.6' }}>
+              This will permanently delete their account from Firebase Authentication and Firestore. They will no longer be able to log in. This action is irreversible.
+            </p>
+
+            <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
+              <NeuButton 
+                type="button" 
+                onClick={() => setDeletingStaff(null)} 
+                style={{ flex: 1 }}
+                disabled={deleting}
+              >
+                Cancel
+              </NeuButton>
+              <NeuButton 
+                type="button" 
+                onClick={handleDeleteStaff} 
+                variant="accent" 
+                style={{ flex: 1, backgroundColor: 'var(--color-danger)', border: '1px solid var(--color-danger)', color: '#fff' }}
+                disabled={deleting}
+              >
+                {deleting ? 'Deleting...' : 'Confirm Delete'}
+              </NeuButton>
+            </div>
           </NeuCard>
         </div>
       )}
