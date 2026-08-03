@@ -204,7 +204,7 @@
   align-items: center;
   justify-content: space-between;
   padding: 4px;
-  width: 76px;
+  width: 78px;
   height: 38px;
   background: var(--bg-surface);
   border: 1px solid var(--border-color);
@@ -213,7 +213,25 @@
   cursor: pointer;
   position: relative;
   user-select: none;
-  transition: background-color var(--transition-normal);
+  transition: all 0.4s ease;
+  overflow: hidden;
+}
+
+.neu-theme-toggle::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(135deg, rgba(251, 191, 36, 0.12), rgba(245, 158, 11, 0.04));
+  opacity: 1;
+  transition: opacity 0.4s ease;
+  z-index: 1;
+}
+
+.neu-theme-toggle.dark::before {
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.15), rgba(168, 85, 247, 0.08));
 }
 
 .neu-theme-toggle-thumb {
@@ -224,26 +242,33 @@
   height: 30px;
   border-radius: var(--border-radius-full);
   background: var(--bg-surface-elevated);
-  box-shadow: var(--neu-shadow-raised-sm);
+  box-shadow: 0 2px 10px rgba(245, 158, 11, 0.4), var(--neu-shadow-raised-sm);
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--text-primary);
-  transition: transform var(--transition-normal), background-color var(--transition-normal), color var(--transition-normal);
+  color: var(--color-warning);
+  z-index: 3;
+  transition: transform 0.48s cubic-bezier(0.34, 1.56, 0.64, 1), 
+              box-shadow 0.48s ease, 
+              background-color 0.4s ease, 
+              color 0.4s ease;
 }
 
 .neu-theme-toggle.dark .neu-theme-toggle-thumb {
-  transform: translateX(36px);
-  color: var(--color-primary);
+  transform: translateX(38px) rotate(360deg);
+  color: #a78bfa;
+  box-shadow: 0 2px 10px rgba(139, 92, 246, 0.5), var(--neu-shadow-raised-sm);
 }
 
 .neu-theme-toggle-icon {
-  width: 16px;
-  height: 16px;
-  opacity: 0.4;
-  transition: opacity var(--transition-normal);
+  width: 14px;
+  height: 14px;
+  opacity: 0.3;
+  z-index: 2;
+  transition: opacity 0.3s ease, transform 0.3s ease;
 }
 
 .neu-theme-toggle-icon.active {
-  opacity: 0.8;
+  opacity: 0.9;
+  transform: scale(1.1);
 }

@@ -155,24 +155,12 @@ function DashboardLayout() {
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--bg-base)', transition: 'background var(--transition-normal)' }}>
       {/* Sidebar - Desktop */}
-      <aside style={{
-        width: '280px',
-        backgroundColor: 'var(--bg-surface)',
-        borderRight: '1px solid var(--border-color)',
-        display: 'flex',
-        flexDirection: 'column',
-        position: 'fixed',
-        top: 0,
-        bottom: 0,
-        left: 0,
-        zIndex: 10,
-        transition: 'transform var(--transition-normal)'
-      }} className={`desktop-sidebar ${sidebarOpen ? 'open' : ''}`}>
+      <aside className={`desktop-sidebar ${sidebarOpen ? 'open' : ''}`}>
         
         {/* Sidebar Header */}
         <div style={{
           padding: '24px',
-          borderBottom: '1px solid var(--border-color)',
+          borderBottom: '1px solid var(--border-color-glass)',
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center'
@@ -246,14 +234,14 @@ function DashboardLayout() {
                   display: 'flex',
                   alignItems: 'center',
                   gap: '12px',
-                  padding: '12px 16px',
+                  padding: '11px 15px 11px 19px', // Subtract 1px to offset 1px border so height remains exactly 46px
                   color: isActive ? 'var(--text-primary)' : 'var(--text-secondary)',
-                  backgroundColor: isActive ? 'var(--color-success-glow)' : 'transparent',
+                  background: isActive ? 'var(--color-success-glass)' : 'transparent',
+                  border: isActive ? '1px solid var(--color-success-glass-border)' : '1px solid transparent',
                   borderRadius: 'var(--border-radius-sm)',
                   transition: 'all var(--transition-fast)',
                   fontSize: '0.95rem',
-                  borderLeft: isActive ? '3px solid var(--color-success)' : '3px solid transparent',
-                  boxShadow: isActive ? 'inset 1px 1px 3px var(--color-shadow-dark), inset -1px -1px 3px var(--color-shadow-light)' : 'none'
+                  boxShadow: isActive ? 'var(--color-success-glass-shadow)' : 'none'
                 }}
               >
                 <Icon size={18} style={{ color: isActive ? 'var(--color-success)' : 'inherit' }} />
@@ -265,21 +253,10 @@ function DashboardLayout() {
       </aside>
 
       {/* Main Content Area */}
-      <div style={{ flex: 1, marginLeft: '280px', display: 'flex', flexDirection: 'column' }} className="main-container">
+      <div style={{ flex: 1, marginLeft: '308px', display: 'flex', flexDirection: 'column' }} className="main-container">
         
         {/* Top Header */}
-        <header style={{
-          height: '70px',
-          backgroundColor: 'var(--bg-surface)',
-          borderBottom: '1px solid var(--border-color)',
-          padding: '0 24px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          position: 'sticky',
-          top: 0,
-          zIndex: 5
-        }}>
+        <header className="floating-navbar">
           {/* Mobile menu toggle */}
           <button 
             onClick={() => setSidebarOpen(!sidebarOpen)}
@@ -769,12 +746,70 @@ function DashboardLayout() {
 
       {/* Embedded Responsive styles */}
       <style>{`
+        .floating-navbar {
+          height: 70px;
+          background-color: var(--bg-surface-glass);
+          backdrop-filter: blur(24px) saturate(190%);
+          -webkit-backdrop-filter: blur(24px) saturate(190%);
+          border: 1px solid var(--border-color-glass);
+          border-radius: var(--border-radius-md);
+          box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.04), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+          padding: 0 24px;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          position: sticky;
+          top: 16px;
+          margin: 16px 40px 0 40px;
+          z-index: 99;
+           transition: all var(--transition-normal);
+        }
+
+        .sidebar-nav-link {
+          position: relative;
+        }
+
+        .sidebar-nav-link.active::before {
+          content: '';
+          position: absolute;
+          left: 6px;
+          top: 8px;
+          bottom: 8px;
+          width: 4px;
+          background-color: var(--color-success);
+          border-radius: var(--border-radius-full);
+          box-shadow: 0 0 8px var(--color-success);
+        }
+
+        .desktop-sidebar {
+          width: 260px;
+          background-color: var(--bg-surface-glass);
+          backdrop-filter: blur(24px) saturate(190%);
+          -webkit-backdrop-filter: blur(24px) saturate(190%);
+          border: 1px solid var(--border-color-glass);
+          border-radius: var(--border-radius-md);
+          box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.04), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+          display: flex;
+          flex-direction: column;
+          position: fixed;
+          top: 16px;
+          bottom: 16px;
+          left: 24px;
+          z-index: 99;
+          transition: transform var(--transition-normal);
+        }
+
         @media (max-width: 991px) {
           .desktop-sidebar {
-            transform: translateX(-280px);
+            left: 16px !important;
+            top: 16px !important;
+            bottom: 16px !important;
+            width: 260px !important;
+            transform: translateX(-320px) !important;
+            border-radius: var(--border-radius-md) !important;
           }
           .desktop-sidebar.open {
-            transform: translateX(0);
+            transform: translateX(0) !important;
           }
           .mobile-close-btn {
             display: block !important;
@@ -784,6 +819,11 @@ function DashboardLayout() {
           }
           .mobile-menu-btn {
             display: block !important;
+          }
+          .floating-navbar {
+            margin: 12px 16px 0 16px;
+            top: 12px;
+            border-radius: var(--border-radius-sm);
           }
         }
       `}</style>

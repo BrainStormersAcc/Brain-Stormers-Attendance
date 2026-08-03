@@ -71,11 +71,11 @@ function App() {
             <Route path="style-guide" element={<StyleGuide />} />
           )}
           
-          {/* Module-Specific Route - restricted to staff role */}
+          {/* Module-Specific Route - shared by admin and staff roles */}
           <Route 
             path="staff-attendance/*" 
             element={
-              <ProtectedRoute requiredRole="staff">
+              <ProtectedRoute>
                 <StaffDashboard />
               </ProtectedRoute>
             } 

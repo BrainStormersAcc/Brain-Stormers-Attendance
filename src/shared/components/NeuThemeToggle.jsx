@@ -13,9 +13,9 @@ export default function NeuThemeToggle({ className = '', ...props }) {
       {...props}
     >
       <Sun className={`neu-theme-toggle-icon ${theme === 'light' ? 'active' : ''}`} size={16} style={{ color: 'var(--color-warning)', marginLeft: '8px' }} />
-      <Moon className={`neu-theme-toggle-icon ${theme === 'dark' ? 'active' : ''}`} size={16} style={{ color: 'var(--color-primary)', marginRight: '8px' }} />
+      <Moon className={`neu-theme-toggle-icon ${theme === 'dark' ? 'active' : ''}`} size={16} style={{ color: '#a78bfa', marginRight: '8px' }} />
       <div className="neu-theme-toggle-thumb">
-        {theme === 'light' ? <Sun size={14} style={{ color: 'var(--color-warning)' }} /> : <Moon size={14} style={{ color: 'var(--color-primary)' }} />}
+        {theme === 'light' ? <Sun size={14} style={{ color: 'var(--color-warning)' }} /> : <Moon size={14} style={{ color: '#a78bfa' }} />}
       </div>
     </div>
   );

@@ -141,6 +141,34 @@ graph TD
 
 ---
 
+## 7.5 Staff Attendance Module (Specs)
+
+The "Staff Attendance" module is a shared route accessible at `/staff-attendance` containing role-based dashboards, interactive month calendars, and data exporting.
+
+### A. Role-Based Capabilities
+1. **Admin Dashboard**:
+   - **Metrics Overview**: Displays Present Today, Absent Today, Late Today, and Period Average Attendance %.
+   - **Filter Controls**: Features Date Range pickers (`From` and `To`), type-ahead searchable staff names auto-completion dropdown, and multi-select status chips.
+   - **Attendance Logs Table**: Renders UIDs as friendly staff names using an in-memory profile directory lookup. Includes pagination (8 rows per page).
+   - **Calendar Month Grid**: Renders active/padding day grids showing color status dots representing logs breakdown. Clicking a day opens a popover detailing all active staff check-in/out statuses for that day.
+   - **Monthly Summary Table**: Separate roster table detailing Present, Absent, and Late days, plus final attendance percentage. Supports clickable sorting (ascending/descending) on any column.
+2. **Staff Dashboard**:
+   - **Metrics Overview**: Displays personal Check-In Status today, present days count, absent days count, and overall attendance rate.
+   - **Filter Controls**: Restricts filters to Date range selection and status toggles (completely omits the staff member search input).
+   - **Attendance Logs Table**: Renders user-isolated history logs (omits the "Staff Name" column).
+   - **Calendar Month Grid**: Renders a personal calendar showing a single color status dot. Clicking a day opens a modal card showing check-in and check-out timestamps.
+
+### B. Shared Neumorphic Components
+- **[NeuBadge](file:///c:/Users/niaz/Desktop/Brain-Stormers/Projects/Brain-Stormers-Attendance/src/shared/components/NeuBadge.jsx)**: A tactile badge displaying attendance status with colored border glows (`present` green, `late` amber, `absent` red).
+- **[NeuSegmentedControl](file:///c:/Users/niaz/Desktop/Brain-Stormers/Projects/Brain-Stormers-Attendance/src/shared/components/NeuSegmentedControl.jsx)**: A pill-shaped segmented tabs controller. Utilizes dynamic DOM offset coordinates measurements (`offsetLeft` and `offsetWidth`) to animate a raised Neumorphic background slider thumb behind static label text.
+
+### C. Data Export Engines
+- **CSV Export**: plain comma-separated values blob downloaded client-side. Respects active filters. Admin files include full details, while staff files exclude the "Staff Name" column.
+- **PDF Export**: print-optimized layout written to a target window (`window.open`). Summarizes active search filters in a slate box, and renders a clean, professional border-based table with a generation timestamp footer.
+- **Export Control**: Dropdown menu opens with a slide-down + fade-in CSS keyframes animation. Escape key pressing and clicking outside auto-dismisses the dropdown.
+
+---
+
 ## 8. Design System & UX Notes
 
 *   **Visual Style:** Neumorphism Premium. Soft dual shadows (`box-shadow: 8px 8px 16px var(--shadow-dark), -8px -8px 16px var(--shadow-light)`).
