@@ -10,6 +10,7 @@ import {
   updateEmail
 } from 'firebase/auth';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
+import Loader from '../shared/components/Loader.jsx';
 
 const AuthContext = createContext();
 
@@ -157,7 +158,7 @@ export function AuthProvider({ children }) {
 
   return (
     <AuthContext.Provider value={value}>
-      {!loading && children}
+      {loading ? <Loader fullPage={true} /> : children}
     </AuthContext.Provider>
   );
 }

@@ -23,6 +23,7 @@ import NeuInput from './NeuInput';
 import NeuButton from './NeuButton';
 import NeuAvatar from './NeuAvatar';
 import logo from '../../assets/logo.png';
+import Loader from './Loader.jsx';
 
 function DashboardLayout() {
   const location = useLocation();
@@ -30,6 +31,25 @@ function DashboardLayout() {
   const { userProfile, currentUser, logout, changePassword, updateAvatar } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [pageTransitioning, setPageTransitioning] = useState(false);
+
+  useEffect(() => {
+    setPageTransitioning(true);
+    const timer = setTimeout(() => {
+      setPageTransitioning(false);
+    }, 2000); // 2 seconds transition duration
+    return () => clearTimeout(timer);
+  }, [location.pathname]);
+
+  const getLoaderType = () => {
+    const path = location.pathname;
+    if (path === '/') return 'overview';
+    if (path === '/staff-management') return 'staff';
+    if (path === '/attendance-records') return 'records';
+    if (path === '/admin-settings') return 'settings';
+    if (path.startsWith('/staff-attendance')) return 'attendance';
+    return 'default';
+  };
   
   // Dropdown & Modal states
   const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -166,26 +186,15 @@ function DashboardLayout() {
           justifyContent: 'space-between',
           alignItems: 'center'
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div style={{
-              width: '40px',
-              height: '40px',
-              borderRadius: '8px',
-              backgroundColor: 'var(--bg-base)',
-              boxShadow: 'var(--neu-shadow-pressed-sm)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding: '6px',
-              transition: 'background-color var(--transition-normal), box-shadow var(--transition-normal)'
-            }}>
-              <img src={logo} alt="Brain Stormers Logo" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+          <Link to="/" className="sidebar-brand-header">
+            <div className="sidebar-brand-logo-container">
+              <img src={logo} alt="Brain Stormers Logo" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', transition: 'transform var(--transition-normal)' }} />
             </div>
             <div>
-              <h2 style={{ fontSize: '1.15rem', fontFamily: 'var(--font-display)', color: 'var(--text-primary)', lineHeight: 1.2 }}>Brain Stormers</h2>
-              <span style={{ fontSize: '0.7rem', color: 'var(--color-primary)', fontWeight: 600, letterSpacing: '0.05em' }}>ATTENDANCE</span>
+              <h2 style={{ fontSize: '1.15rem', fontFamily: 'var(--font-display)', color: 'var(--text-primary)', lineHeight: 1.2, margin: 0 }}>Brain Stormers</h2>
+              <span style={{ fontSize: '0.7rem', color: 'var(--color-primary)', fontWeight: 600, letterSpacing: '0.05em', transition: 'color var(--transition-normal), text-shadow var(--transition-normal)' }}>ATTENDANCE</span>
             </div>
-          </div>
+          </Link>
           <button 
             onClick={() => setSidebarOpen(false)} 
             style={{
@@ -469,8 +478,20 @@ function DashboardLayout() {
         </header>
 
         {/* Page Yield Outlet */}
-        <main style={{ flex: 1, padding: '40px', maxWidth: '1200px', width: '100%', margin: '0 auto' }}>
-          <Outlet />
+        <main style={{ flex: 1, padding: '40px', maxWidth: '1200px', width: '100%', margin: '0 auto', position: 'relative' }}>
+          {pageTransitioning && (
+            <div className="page-transition-overlay">
+              <Loader size={45} type={getLoaderType()} style={{ padding: 0 }} />
+            </div>
+          )}
+          <div style={{
+            opacity: pageTransitioning ? 0 : 1,
+            transform: pageTransitioning ? 'translateY(8px)' : 'translateY(0)',
+            transition: 'opacity 0.25s ease, transform 0.25s ease',
+            visibility: pageTransitioning ? 'hidden' : 'visible'
+          }}>
+            <Outlet />
+          </div>
         </main>
       </div>
 
@@ -763,6 +784,151 @@ function DashboardLayout() {
 
       {/* Embedded Responsive styles */}
       <style>{`
+        .sidebar-brand-header {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          padding: 8px 12px;
+          margin-left: -12px;
+          border-radius: var(--border-radius-sm);
+          cursor: pointer;
+          transition: all var(--transition-normal);
+          position: relative;
+          overflow: hidden;
+        }
+
+        .sidebar-brand-header::before {
+          content: '';
+          position: absolute;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background: linear-gradient(135deg, rgba(59, 130, 246, 0.08) 0%, rgba(37, 99, 235, 0.02) 100%);
+          backdrop-filter: blur(12px);
+          -webkit-backdrop-filter: blur(12px);
+          border: 1px solid rgba(59, 130, 246, 0.15);
+          border-radius: var(--border-radius-sm);
+          opacity: 0;
+          transition: opacity var(--transition-normal);
+          z-index: 1;
+        }
+
+        .sidebar-brand-header:hover::before {
+          opacity: 1;
+        }
+
+        .sidebar-brand-header > * {
+          position: relative;
+          z-index: 2;
+        }
+
+        .sidebar-brand-logo-container {
+          width: 40px;
+          height: 40px;
+          border-radius: 8px;
+          background-color: var(--bg-base);
+          box-shadow: var(--neu-shadow-pressed-sm);
+          display: flex;
+          align-items: center;
+          justifyContent: center;
+          padding: 6px;
+          transition: all var(--transition-normal);
+          overflow: hidden;
+          position: relative;
+        }
+
+        .sidebar-brand-header:hover .sidebar-brand-logo-container {
+          transform: translateY(-4px) scale(1.05);
+          box-shadow: 0 0 12px rgba(59, 130, 246, 0.4), var(--neu-shadow-raised-sm);
+          border-color: rgba(59, 130, 246, 0.3);
+          background-color: var(--bg-surface-elevated);
+        }
+
+        .sidebar-brand-logo-container::after {
+          content: '';
+          position: absolute;
+          top: 0;
+          left: -150%;
+          width: 100%;
+          height: 100%;
+          background: linear-gradient(
+            90deg,
+            transparent,
+            rgba(255, 255, 255, 0) 30%,
+            rgba(255, 255, 255, 0.4) 50%,
+            rgba(255, 255, 255, 0) 70%,
+            transparent
+          );
+          transform: skewX(-20deg);
+          transition: none;
+        }
+
+        html[data-theme="dark"] .sidebar-brand-logo-container::after {
+          background: linear-gradient(
+            90deg,
+            transparent,
+            rgba(138, 180, 248, 0) 30%,
+            rgba(138, 180, 248, 0.5) 50%,
+            rgba(138, 180, 248, 0) 70%,
+            transparent
+          );
+        }
+
+        .sidebar-brand-header:hover .sidebar-brand-logo-container::after {
+          animation: logo-shimmer-flow 1.5s infinite;
+        }
+
+        @keyframes logo-shimmer-flow {
+          0% {
+            left: -150%;
+          }
+          100% {
+            left: 150%;
+          }
+        }
+
+        .sidebar-brand-header:hover img {
+          animation: logo-float-flow 2s ease-in-out infinite alternate;
+        }
+
+        @keyframes logo-float-flow {
+          0% {
+            transform: translateY(0px);
+          }
+          100% {
+            transform: translateY(-2px);
+          }
+        }
+
+        .sidebar-brand-header:hover span {
+          color: #3b82f6 !important;
+          text-shadow: 0 0 8px rgba(59, 130, 246, 0.4);
+        }
+
+        .page-transition-overlay {
+          position: absolute;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          min-height: 250px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          z-index: 10;
+          background-color: var(--bg-base);
+          transition: background-color var(--transition-normal);
+          animation: page-loader-fade-in-out 2s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+        }
+
+        @keyframes page-loader-fade-in-out {
+          0% { opacity: 0; transform: scale(0.96); }
+          10% { opacity: 1; transform: scale(1); }
+          90% { opacity: 1; transform: scale(1); }
+          100% { opacity: 0; transform: scale(0.99); }
+        }
+
         .floating-navbar {
           height: 70px;
           background-color: var(--bg-surface-glass);

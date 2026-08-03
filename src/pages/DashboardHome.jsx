@@ -33,6 +33,7 @@ import {
   getAllAttendance 
 } from '../services/adminService.js';
 import { useAuth } from '../contexts/AuthContext.jsx';
+import Skeleton from '../shared/components/Skeleton.jsx';
 
 export default function DashboardHome(props) {
   const activeTab = props.view || 'overview';
@@ -373,9 +374,21 @@ export default function DashboardHome(props) {
 
       {/* Tab Yield Viewports */}
       <div className="tab-viewport">
-        
-        {/* VIEW: OVERVIEW */}
-        {activeTab === 'overview' && (
+        {loading ? (
+          activeTab === 'overview' ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
+              <Skeleton type="stats" />
+              <Skeleton type="default" />
+            </div>
+          ) : activeTab === 'admin-settings' ? (
+            <Skeleton type="default" style={{ maxWidth: '600px', margin: '0 auto' }} />
+          ) : (
+            <Skeleton type="table" rows={activeTab === 'records' ? 8 : 6} />
+          )
+        ) : (
+          <>
+            {/* VIEW: OVERVIEW */}
+            {activeTab === 'overview' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
             {/* Stats Cards Section */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '24px' }}>
@@ -823,7 +836,8 @@ export default function DashboardHome(props) {
             </form>
           </NeuCard>
         )}
-
+          </>
+        )}
       </div>
 
       {/* Edit Staff Credentials Modal */}

@@ -490,6 +490,9 @@ export default function StaffDashboard() {
 
   // SUB-RENDER: Summary Cards View
   const renderSummaryCards = () => {
+    if (statsLoading) {
+      return renderLoadingSkeleton();
+    }
     return (
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '24px' }}>
         {isAdmin ? (
@@ -1218,6 +1221,18 @@ export default function StaffDashboard() {
 
   // SUB-RENDER: Calendar Month Grid View
   const renderCalendarView = () => {
+    if (statsLoading) {
+      return (
+        <NeuCard variant="raised" style={{ padding: '36px', display: 'flex', flexDirection: 'column', gap: '24px' }}>
+          <div style={{ height: '32px', width: '30%', backgroundColor: 'var(--bg-surface-elevated)', borderRadius: '4px', animation: 'pulse 1.5s infinite ease-in-out' }} />
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '16px' }}>
+            {Array.from({ length: 35 }).map((_, i) => (
+              <div key={i} style={{ height: '80px', backgroundColor: 'var(--bg-surface-elevated)', borderRadius: '8px', animation: 'pulse 1.5s infinite ease-in-out', boxShadow: 'var(--neu-shadow-pressed-sm)' }} />
+            ))}
+          </div>
+        </NeuCard>
+      );
+    }
     const year = calendarViewDate.getFullYear();
     const month = calendarViewDate.getMonth();
     
@@ -1626,6 +1641,18 @@ export default function StaffDashboard() {
   // SUB-RENDER: Monthly summary table card
   const renderMonthlySummaryTable = () => {
     if (!isAdmin) return null;
+    if (statsLoading) {
+      return (
+        <NeuCard variant="raised" style={{ padding: '36px', display: 'flex', flexDirection: 'column', gap: '24px', marginTop: '16px' }}>
+          <div style={{ height: '24px', width: '40%', backgroundColor: 'var(--bg-surface-elevated)', borderRadius: '4px', animation: 'pulse 1.5s infinite ease-in-out' }} />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} style={{ height: '20px', backgroundColor: 'var(--bg-surface-elevated)', borderRadius: '4px', animation: 'pulse 1.5s infinite ease-in-out' }} />
+            ))}
+          </div>
+        </NeuCard>
+      );
+    }
 
     const scope = getSelectedMonthScope();
     const roster = getMonthlySummaryRoster();
