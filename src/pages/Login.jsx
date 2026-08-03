@@ -8,6 +8,7 @@ import NeuThemeToggle from '../shared/components/NeuThemeToggle.jsx';
 import { Mail, Lock } from 'lucide-react';
 import { db } from '../config/firebase.js';
 import { doc, getDoc } from 'firebase/firestore';
+import logo from '../assets/logo.png';
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -71,6 +72,21 @@ export default function Login() {
 
       <NeuCard variant="raised" style={{ width: '100%', maxWidth: '420px', padding: '40px' }}>
         <div style={{ textAlign: 'center', marginBottom: '32px' }}>
+          <div style={{
+            width: '90px',
+            height: '90px',
+            borderRadius: '50%',
+            backgroundColor: 'var(--bg-base)',
+            boxShadow: 'var(--neu-shadow-pressed-sm)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            margin: '0 auto 20px auto',
+            padding: '12px',
+            transition: 'background-color var(--transition-normal), box-shadow var(--transition-normal)'
+          }}>
+            <img src={logo} alt="Brain Stormers Logo" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+          </div>
           <h2 style={{ fontSize: '2rem', fontFamily: 'var(--font-display)', marginBottom: '8px' }}>Brain Stormers</h2>
           <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>Attendance Portal Staff Check-In</p>
         </div>

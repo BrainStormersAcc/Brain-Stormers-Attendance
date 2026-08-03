@@ -22,6 +22,7 @@ import NeuCard from './NeuCard';
 import NeuInput from './NeuInput';
 import NeuButton from './NeuButton';
 import NeuAvatar from './NeuAvatar';
+import logo from '../../assets/logo.png';
 
 function DashboardLayout() {
   const location = useLocation();
@@ -165,9 +166,25 @@ function DashboardLayout() {
           justifyContent: 'space-between',
           alignItems: 'center'
         }}>
-          <div>
-            <h2 style={{ fontSize: '1.25rem', fontFamily: 'var(--font-display)', color: 'var(--text-primary)' }}>Brain Stormers</h2>
-            <span style={{ fontSize: '0.75rem', color: 'var(--color-primary)', fontWeight: 600 }}>ATTENDANCE</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div style={{
+              width: '40px',
+              height: '40px',
+              borderRadius: '8px',
+              backgroundColor: 'var(--bg-base)',
+              boxShadow: 'var(--neu-shadow-pressed-sm)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: '6px',
+              transition: 'background-color var(--transition-normal), box-shadow var(--transition-normal)'
+            }}>
+              <img src={logo} alt="Brain Stormers Logo" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+            </div>
+            <div>
+              <h2 style={{ fontSize: '1.15rem', fontFamily: 'var(--font-display)', color: 'var(--text-primary)', lineHeight: 1.2 }}>Brain Stormers</h2>
+              <span style={{ fontSize: '0.7rem', color: 'var(--color-primary)', fontWeight: 600, letterSpacing: '0.05em' }}>ATTENDANCE</span>
+            </div>
           </div>
           <button 
             onClick={() => setSidebarOpen(false)} 
