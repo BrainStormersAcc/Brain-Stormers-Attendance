@@ -195,7 +195,10 @@ export const getAllAttendance = async () => {
     
     const logs = [];
     querySnapshot.forEach((doc) => {
-      logs.push({ id: doc.id, ...doc.data() });
+      const data = doc.data();
+      if (data.isDeleted !== true) {
+        logs.push({ id: doc.id, ...data });
+      }
     });
     
     return logs;

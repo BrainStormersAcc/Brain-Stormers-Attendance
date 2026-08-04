@@ -77,11 +77,27 @@ Tracks daily attendance check-ins and check-outs.
 *   `checkIn` (timestamp): Time the user checked in.
 *   `checkOut` (timestamp): Time the user checked out.
 *   `status` (string): Attendance status (`"present"` | `"absent"` | `"late"`).
-*   `markedBy` (string): Source of the attendance log (`"manual"` | `"fingerprint"`).
+*   `markedBy` (string): Source of the attendance log (`"fingerprint"` | `"self-checkin"` | `"admin-manual"`).
+*   `lastEditedBy` (string, optional): The UID of the Admin who manually updated this record (only present if adjusted).
+*   `lastEditedAt` (timestamp, optional): The timestamp when this record was adjusted by an Admin (only present if adjusted).
+*   `isDeleted` (boolean): Soft delete flag (default `false`). If `true`, the record is hidden from all active queries.
 
 > [!NOTE]
 > **Why is "role" duplicated in the `attendance` collection?**
 > Storing the `role` directly inside the `attendance` document allows the system to support future student and teacher modules without restructuring the database. Queries can instantly filter attendance lists by role (e.g., retrieving only "staff" logs) without performing expensive cross-document lookups.
+
+#### `auditLogs` (Collection)
+Tracks all manual creations, adjustments, or soft-deletions of attendance records for governance.
+
+*   `action` (string): The category of adjustment (`"create"` | `"update"` | `"delete"`).
+*   `targetCollection` (string): The collection targeted by the change (always `"attendance"`).
+*   `targetDocId` (string): The document ID of the affected attendance record.
+*   `performedBy` (string): The UID of the Admin who executed the action.
+*   `performedByName` (string): Denormalized display name of the Admin who performed the action.
+*   `timestamp` (timestamp): Server-side timestamp indicating when the action occurred.
+*   `reason` (string): Mandatory note/reason justifying the administrative adjustment.
+*   `previousData` (map/object or null): Snapshot of the attendance document *before* the change (null for `"create"`).
+*   `newData` (map/object or null): Snapshot of the attendance document *after* the change (null for `"delete"`).
 
 ---
 
@@ -103,6 +119,13 @@ Key security controls enforced:
 5.  **UX vs. Security Boundary:** 
     > [!IMPORTANT]
     > Client-side checks (e.g., hiding buttons or blocking paths in React Router) are for **UX only**. Real data protection happens in `firestore.rules`. Never rely on frontend logic to secure the database.
+
+### C. Audit & Soft-Delete Policy
+
+To ensure complete operational integrity, transparency, and accountability:
+1.  **Soft-Deletes Only:** No client-side SDK is permitted to hard-delete attendance documents from Firestore. In the database rules, `allow delete` is blocked entirely. Adjustments that delete a record must set `isDeleted: true`. Queries listing records must exclude those with `isDeleted == true`.
+2.  **Immutability of Audit Logs:** The `/auditLogs` collection is immutable. Rules prohibit updates or deletions (`allow update, delete: if false;`) by anyone. This prevents the cover-up of modifications, preserving a reliable audit trail.
+3.  **Mandatory Reason Entry:** Every manual override (creating, editing, or deleting) requires the Admin to provide a textual reason, stored under the `reason` field in `auditLogs`.
 
 ---
 
@@ -137,7 +160,7 @@ graph TD
 3.  **Step 3 (LAST): Teacher Module** — Built only after the Student module is stable.
 4.  **Hardware Phase: Fingerprint Scanner Integration (Independent)**
     *   A physical biometric scanner (e.g., ZKTeco-style hardware) will be linked via a middleware bridge script that pushes check-in times to Firestore.
-    *   For now, attendance is marked manually in the UI, but the schema includes `markedBy` (`"manual"` | `"fingerprint"`) so the hardware can be integrated at any point without schema modifications once purchased.
+    *   For now, attendance is marked manually in the UI, but the schema includes `markedBy` (`"fingerprint"` | `"self-checkin"` | `"admin-manual"`) so the hardware or self-checkin interfaces can be integrated at any point without schema modifications.
 
 ---
 

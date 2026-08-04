@@ -310,3 +310,17 @@ a:hover {
   }
 }
 
+/* Premium Neumorphic Success Checkmark scale up and glow */
+@keyframes scaleUpAndGlow {
+  0% {
+    transform: scale(0.6);
+    opacity: 0;
+    filter: drop-shadow(0 0 0 rgba(16, 185, 129, 0));
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+    filter: drop-shadow(0 0 12px rgba(16, 185, 129, 0.45));
+  }
+}
+

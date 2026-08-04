@@ -14,14 +14,18 @@ rules_version = '2';
 //     - WRITE (Create, Update, Delete): Restricted exclusively to "admin" role.
 //
 // [x] /attendance/{attendanceId} collection rules:
-//     - CREATE: Requester must be signed in, and the document's userId 
-//               field must match their authenticated uid.
-//     - READ: Requester must be signed in, and can only read documents where 
-//             userId matches their authenticated uid. Admins can read all logs.
-//     - UPDATE: Requester must be signed in. Staff can only update their own 
-//               document and only the 'checkOut' and 'status' fields.
-//               Admins can update any fields.
-//     - DELETE: Restricted exclusively to "admin" role.
+//     - CREATE: Requester must be signed in. Admins can specify "admin-manual".
+//               Staff can check-in themselves ("fingerprint"/"self-checkin"),
+//               but cannot set lastEditedBy, lastEditedAt, or isDeleted=true.
+//     - READ: Authenticated users can read their own logs. Admins can read all logs.
+//     - UPDATE: Staff can only update 'checkOut' and 'status' on their own logs.
+//               Admins have unrestricted update access.
+//     - DELETE: Blocked entirely (soft-delete only via updating isDeleted: true).
+//
+// [x] /auditLogs/{logId} collection rules:
+//     - READ: Exclusive to Admins.
+//     - CREATE: Exclusive to Admins.
+//     - UPDATE/DELETE: Blocked entirely (immutable ledger).
 // =========================================================================
 
 service cloud.firestore {
@@ -46,14 +50,29 @@ service cloud.firestore {
 
     // Rules for attendance collection
     match /attendance/{attendanceId} {
-      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow create: if isSignedIn() && (
+        (isAdmin() && request.resource.data.markedBy in ["fingerprint", "self-checkin", "admin-manual"]) || (
+          request.resource.data.userId == request.auth.uid &&
+          request.resource.data.markedBy in ["fingerprint", "self-checkin"] &&
+          !(request.resource.data.keys().hasAny(['lastEditedBy', 'lastEditedAt'])) &&
+          (!request.resource.data.keys().hasAll(['isDeleted']) || request.resource.data.isDeleted == false)
+        )
+      );
       allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
       allow update: if isSignedIn() && (
-        isAdmin() || 
-        (resource.data.userId == request.auth.uid && 
-         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['checkOut', 'status']))
+        isAdmin() || (
+          resource.data.userId == request.auth.uid &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['checkOut', 'status'])
+        )
       );
-      allow delete: if isAdmin();
+      allow delete: if false;
+    }
+
+    // Rules for auditLogs collection
+    match /auditLogs/{logId} {
+      allow read: if isAdmin();
+      allow create: if isAdmin();
+      allow update, delete: if false;
     }
   }
 }

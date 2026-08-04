@@ -28,7 +28,10 @@ import {
   collection, 
   getDocs, 
   query, 
-  where 
+  where,
+  writeBatch,
+  doc,
+  serverTimestamp
 } from 'firebase/firestore';
 import { getAllStaff, getAllAttendance } from '../../../services/adminService.js';
 
@@ -52,6 +55,22 @@ export default function StaffDashboard() {
   const [selectedCalendarDay, setSelectedCalendarDay] = useState(null);
   const [isCalendarModalOpen, setIsCalendarModalOpen] = useState(false);
   const [isManualRecordModalOpen, setIsManualRecordModalOpen] = useState(false);
+
+  // Manual Attendance Record adjustment states
+  const [manualStaff, setManualStaff] = useState(null);
+  const [manualDate, setManualDate] = useState('');
+  const [manualCheckIn, setManualCheckIn] = useState('');
+  const [manualCheckOut, setManualCheckOut] = useState('');
+  const [manualStatus, setManualStatus] = useState('present');
+  const [manualReason, setManualReason] = useState('');
+  const [manualStaffSearch, setManualStaffSearch] = useState('');
+  const [isManualStaffDropdownOpen, setIsManualStaffDropdownOpen] = useState(false);
+  const [manualSubmitting, setManualSubmitting] = useState(false);
+  const [manualSuccess, setManualSuccess] = useState(false);
+  const [manualError, setManualError] = useState('');
+
+  // Refs for modal dropdowns and clicks outside
+  const manualStaffDropdownRef = useRef(null);
 
   // Summary sort states (Admin Only)
   const [summarySortField, setSummarySortField] = useState('pct');
@@ -93,6 +112,17 @@ export default function StaffDashboard() {
     const handleClickOutside = (e) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
         setIsStaffDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Sync click outside triggers for searchable manual staff dropdown inside modal
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (manualStaffDropdownRef.current && !manualStaffDropdownRef.current.contains(e.target)) {
+        setIsManualStaffDropdownOpen(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -149,53 +179,196 @@ export default function StaffDashboard() {
     return workingDays;
   };
 
+  // Refactored data fetcher accessible component-wide
+  const fetchRawData = async () => {
+    setDataLoading(true);
+    setDataError('');
+    try {
+      if (userProfile.role === 'admin') {
+        // 1. Fetch active staff list
+        const staffList = await getAllStaff();
+        const activeStaff = staffList.filter(s => s.active);
+        setRawStaffList(activeStaff);
+
+        // Build Name lookup map
+        const nameMap = {};
+        activeStaff.forEach(s => {
+          nameMap[s.uid] = s.name;
+        });
+        setStaffNameMap(nameMap);
+
+        // 2. Fetch all attendance logs
+        const allLogs = await getAllAttendance();
+        const staffLogs = allLogs.filter(log => log.role === 'staff');
+        setRawLogs(staffLogs);
+      } else {
+        // Staff View: Fetch only user's isolated logs
+        const attendanceRef = collection(db, 'attendance');
+        const q = query(attendanceRef, where('userId', '==', currentUser.uid));
+        const querySnapshot = await getDocs(q);
+        
+        const userLogs = [];
+        querySnapshot.forEach((doc) => {
+          const data = doc.data();
+          if (data.isDeleted !== true) {
+            userLogs.push({ id: doc.id, ...data });
+          }
+        });
+        setRawLogs(userLogs);
+      }
+    } catch (err) {
+      console.error('Error fetching raw attendance data:', err);
+      setDataError('Failed to fetch attendance logs.');
+    } finally {
+      setDataLoading(false);
+    }
+  };
+
   // Fetch full records list initially
   useEffect(() => {
-    if (!currentUser || !userProfile) return;
-
-    const fetchRawData = async () => {
-      setDataLoading(true);
-      setDataError('');
-      try {
-        if (userProfile.role === 'admin') {
-          // 1. Fetch active staff list
-          const staffList = await getAllStaff();
-          const activeStaff = staffList.filter(s => s.active);
-          setRawStaffList(activeStaff);
-
-          // Build Name lookup map
-          const nameMap = {};
-          activeStaff.forEach(s => {
-            nameMap[s.uid] = s.name;
-          });
-          setStaffNameMap(nameMap);
-
-          // 2. Fetch all attendance logs
-          const allLogs = await getAllAttendance();
-          const staffLogs = allLogs.filter(log => log.role === 'staff');
-          setRawLogs(staffLogs);
-        } else {
-          // Staff View: Fetch only user's isolated logs
-          const attendanceRef = collection(db, 'attendance');
-          const q = query(attendanceRef, where('userId', '==', currentUser.uid));
-          const querySnapshot = await getDocs(q);
-          
-          const userLogs = [];
-          querySnapshot.forEach((doc) => {
-            userLogs.push(doc.data());
-          });
-          setRawLogs(userLogs);
-        }
-      } catch (err) {
-        console.error('Error fetching raw attendance data:', err);
-        setDataError('Failed to fetch attendance logs.');
-      } finally {
-        setDataLoading(false);
-      }
-    };
-
-    fetchRawData();
+    if (currentUser && userProfile) {
+      fetchRawData();
+    }
   }, [currentUser, userProfile]);
+
+  // Form initialization helper
+  const handleOpenManualRecordModal = () => {
+    setManualStaff(null);
+    setManualDate(getTodayDateString());
+    setManualCheckIn('');
+    setManualCheckOut('');
+    setManualStatus('present');
+    setManualReason('');
+    setManualStaffSearch('');
+    setManualError('');
+    setManualSuccess(false);
+    setIsManualRecordModalOpen(true);
+  };
+
+  // Select staff member from searchable dropdown
+  const handleSelectManualStaff = (staff) => {
+    setManualStaff(staff);
+    setManualStaffSearch(staff.name);
+    setIsManualStaffDropdownOpen(false);
+  };
+
+  // Manual Adjustments Form Submission
+  const handleCreateManualRecord = async (e) => {
+    e.preventDefault();
+    setManualError('');
+    setManualSubmitting(true);
+
+    try {
+      // 1. Basic input validations
+      if (!manualStaff) {
+        setManualError('Please select a staff member.');
+        setManualSubmitting(false);
+        return;
+      }
+      if (!manualDate) {
+        setManualError('Please select a date.');
+        setManualSubmitting(false);
+        return;
+      }
+      const todayStr = getTodayDateString();
+      if (manualDate > todayStr) {
+        setManualError('Date cannot be in the future.');
+        setManualSubmitting(false);
+        return;
+      }
+      if (!manualCheckIn) {
+        setManualError('Please enter a check-in time.');
+        setManualSubmitting(false);
+        return;
+      }
+      if (manualCheckOut && manualCheckOut <= manualCheckIn) {
+        setManualError('Check-out time must be after check-in time.');
+        setManualSubmitting(false);
+        return;
+      }
+      if (!manualReason || manualReason.trim().length < 10) {
+        setManualError('Reason must be at least 10 characters long.');
+        setManualSubmitting(false);
+        return;
+      }
+
+      // 2. Prevent duplicate entries
+      const duplicate = rawLogs.find(
+        log => log.userId === manualStaff.uid && log.date === manualDate && log.isDeleted !== true
+      );
+      if (duplicate) {
+        setManualError('An active attendance record already exists for this staff member on this date. Please EDIT the existing record instead.');
+        setManualSubmitting(false);
+        return;
+      }
+
+      // 3. Compile date & times
+      const parseTime = (timeStr) => {
+        if (!timeStr) return null;
+        const [hours, minutes] = timeStr.split(':').map(Number);
+        const [year, month, day] = manualDate.split('-').map(Number);
+        return new Date(year, month - 1, day, hours, minutes, 0);
+      };
+
+      const checkInDate = parseTime(manualCheckIn);
+      const checkOutDate = parseTime(manualCheckOut);
+
+      // 4. Firestore Batch Write Transaction
+      const batch = writeBatch(db);
+
+      // A. Setup attendance document
+      const attendanceRef = doc(collection(db, 'attendance'));
+      const attendanceId = attendanceRef.id;
+
+      const newAttendanceData = {
+        userId: manualStaff.uid,
+        role: 'staff',
+        date: manualDate,
+        checkIn: checkInDate,
+        checkOut: checkOutDate || null,
+        status: manualStatus,
+        markedBy: 'admin-manual',
+        isDeleted: false
+      };
+
+      batch.set(attendanceRef, newAttendanceData);
+
+      // B. Setup auditLog document
+      const auditLogRef = doc(collection(db, 'auditLogs'));
+      const auditLogData = {
+        action: 'create',
+        targetCollection: 'attendance',
+        targetDocId: attendanceId,
+        performedBy: currentUser.uid,
+        performedByName: userProfile?.name || 'Admin',
+        timestamp: serverTimestamp(),
+        reason: manualReason.trim(),
+        previousData: null,
+        newData: newAttendanceData
+      };
+
+      batch.set(auditLogRef, auditLogData);
+
+      // Commit transaction batch
+      await batch.commit();
+
+      // 5. Success UI feedback & auto-close
+      setManualSuccess(true);
+      setTimeout(() => {
+        setIsManualRecordModalOpen(false);
+        setManualSuccess(false);
+      }, 2500);
+
+      // 6. Reload local dataset
+      await fetchRawData();
+
+    } catch (err) {
+      console.error('Error committing manual adjustment record:', err);
+      setManualError(err.message || 'Failed to submit manual record adjustment.');
+    } finally {
+      setManualSubmitting(false);
+    }
+  };
 
   if (loading || !userProfile) {
     return <Loader />;
@@ -350,6 +523,13 @@ export default function StaffDashboard() {
   const filteredStaffOptions = rawStaffList.filter(s => 
     s.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
     s.username.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  // Filter searchable active staff members for manual adjustments modal
+  const activeStaffList = rawStaffList.filter(s => s.active);
+  const matchedStaff = activeStaffList.filter(s => 
+    s.name.toLowerCase().includes(manualStaffSearch.toLowerCase()) ||
+    s.username.toLowerCase().includes(manualStaffSearch.toLowerCase())
   );
 
   // Helper mappings for My Status Today
@@ -1884,7 +2064,7 @@ export default function StaffDashboard() {
           {isAdmin && (
             <div style={{ display: 'flex', gap: '12px' }}>
               <NeuButton 
-                onClick={() => setIsManualRecordModalOpen(true)}
+                onClick={handleOpenManualRecordModal}
                 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
               >
                 <Plus size={18} />
@@ -2108,7 +2288,7 @@ export default function StaffDashboard() {
         </div>
       )}
 
-      {/* Manual Record Adjustment Placeholder Modal */}
+      {/* Manual Record Adjustment Form Modal */}
       {isManualRecordModalOpen && (
         <div style={{
           position: 'fixed',
@@ -2124,72 +2304,312 @@ export default function StaffDashboard() {
           zIndex: 1000,
           padding: '20px'
         }}>
-          <NeuCard
-            variant="raised"
-            style={{
-              width: '100%',
-              maxWidth: '460px',
-              position: 'relative',
-              padding: '36px',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '24px',
-              textAlign: 'center'
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Close Button */}
-            <button 
-              onClick={() => setIsManualRecordModalOpen(false)}
+          {manualSuccess ? (
+            <NeuCard
+              variant="raised"
               style={{
-                position: 'absolute',
-                top: '20px',
-                right: '20px',
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
-                color: 'var(--text-secondary)'
+                width: '100%',
+                maxWidth: '460px',
+                padding: '36px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '24px',
+                textAlign: 'center',
+                alignItems: 'center',
+                animation: 'scaleUpAndGlow 0.5s ease-out forwards'
               }}
             >
-              <X size={20} />
-            </button>
+              {/* Success Checkmark Circle */}
+              <div style={{
+                width: '80px',
+                height: '80px',
+                borderRadius: '50%',
+                backgroundColor: 'var(--bg-surface-elevated)',
+                boxShadow: 'var(--neu-shadow-pressed-sm)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: 'var(--color-success)',
+              }}>
+                <CheckCircle2 size={48} />
+              </div>
+              <div>
+                <h3 style={{ fontSize: '1.5rem', fontFamily: 'var(--font-display)', marginBottom: '8px' }}>
+                  Adjustment Saved
+                </h3>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', lineHeight: '1.5' }}>
+                  The attendance record has been successfully added, and an audit trail log has been created.
+                </p>
+              </div>
+            </NeuCard>
+          ) : (
+            <NeuCard
+              variant="raised"
+              style={{
+                width: '100%',
+                maxWidth: '460px',
+                position: 'relative',
+                padding: '36px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '24px',
+                textAlign: 'center'
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Close Button */}
+              <button 
+                onClick={() => setIsManualRecordModalOpen(false)}
+                disabled={manualSubmitting}
+                style={{
+                  position: 'absolute',
+                  top: '20px',
+                  right: '20px',
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  color: 'var(--text-secondary)'
+                }}
+              >
+                <X size={20} />
+              </button>
 
-            {/* Modal Icon Indicator */}
-            <div style={{
-              width: '64px',
-              height: '64px',
-              borderRadius: '50%',
-              backgroundColor: 'var(--bg-surface-elevated)',
-              boxShadow: 'var(--neu-shadow-pressed-sm)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              margin: '0 auto',
-              color: 'var(--color-primary)'
-            }}>
-              <Plus size={32} />
-            </div>
+              {/* Modal Icon Indicator */}
+              <div style={{
+                width: '64px',
+                height: '64px',
+                borderRadius: '50%',
+                backgroundColor: 'var(--bg-surface-elevated)',
+                boxShadow: 'var(--neu-shadow-pressed-sm)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                margin: '0 auto',
+                color: 'var(--color-primary)'
+              }}>
+                <Plus size={32} />
+              </div>
 
-            {/* Modal Info */}
-            <div>
-              <h3 style={{ fontSize: '1.5rem', fontFamily: 'var(--font-display)', marginBottom: '8px' }}>
-                Manual Record Adjustment
-              </h3>
-              <p style={{ color: 'var(--color-primary)', fontWeight: 600, fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '12px' }}>
-                Feature Under Construction
-              </p>
-              <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', lineHeight: '1.6' }}>
-                This feature will allow administrators to manually override, insert, or delete staff attendance logs. It is scheduled for integration in the upcoming system enhancement phase.
-              </p>
-            </div>
+              <div>
+                <h3 style={{ fontSize: '1.5rem', fontFamily: 'var(--font-display)', marginBottom: '4px' }}>
+                  Add Manual Record
+                </h3>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
+                  Override or log manual entry for staff members.
+                </p>
+              </div>
 
-            {/* Action button */}
-            <div style={{ display: 'flex', justifyContent: 'center', borderTop: '1px solid var(--border-color)', paddingTop: '20px' }}>
-              <NeuButton onClick={() => setIsManualRecordModalOpen(false)} variant="accent" style={{ padding: '10px 32px' }}>
-                Understood
-              </NeuButton>
-            </div>
-          </NeuCard>
+              <form onSubmit={handleCreateManualRecord} style={{ display: 'flex', flexDirection: 'column', gap: '20px', textAlign: 'left' }}>
+                {/* Searchable Staff Selector */}
+                <div ref={manualStaffDropdownRef} style={{ position: 'relative', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <label className="neu-input-label">Select Staff Member *</label>
+                  <div style={{ position: 'relative' }}>
+                    <NeuInput
+                      placeholder="Type name or username..."
+                      value={manualStaffSearch}
+                      onChange={(e) => {
+                        if (manualStaff) setManualStaff(null);
+                        setManualStaffSearch(e.target.value);
+                        setIsManualStaffDropdownOpen(true);
+                      }}
+                      onFocus={() => setIsManualStaffDropdownOpen(true)}
+                      style={{ margin: 0 }}
+                      disabled={manualSubmitting}
+                    />
+                    {manualStaff && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setManualStaff(null);
+                          setManualStaffSearch('');
+                        }}
+                        style={{
+                          position: 'absolute',
+                          right: '16px',
+                          top: '50%',
+                          transform: 'translateY(-50%)',
+                          background: 'none',
+                          border: 'none',
+                          cursor: 'pointer',
+                          color: 'var(--text-secondary)',
+                          display: 'flex',
+                          alignItems: 'center'
+                        }}
+                      >
+                        <X size={16} />
+                      </button>
+                    )}
+                    {isManualStaffDropdownOpen && (
+                      <div style={{
+                        position: 'absolute',
+                        top: '52px',
+                        left: 0,
+                        right: 0,
+                        zIndex: 1010,
+                      }}>
+                        <NeuCard variant="raised" style={{ padding: '8px', display: 'flex', flexDirection: 'column', gap: '4px', maxHeight: '160px', overflowY: 'auto' }}>
+                          {matchedStaff.length === 0 ? (
+                            <div style={{ padding: '8px 12px', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+                              No active staff found
+                            </div>
+                          ) : (
+                            matchedStaff.map(staff => (
+                              <button
+                                key={staff.uid}
+                                type="button"
+                                onClick={() => handleSelectManualStaff(staff)}
+                                style={{
+                                  width: '100%',
+                                  padding: '8px 12px',
+                                  background: 'transparent',
+                                  border: 'none',
+                                  borderRadius: 'var(--border-radius-sm)',
+                                  textAlign: 'left',
+                                  color: 'var(--text-primary)',
+                                  fontSize: '0.875rem',
+                                  cursor: 'pointer',
+                                  outline: 'none',
+                                  transition: 'background-color var(--transition-fast)'
+                                }}
+                                onMouseOver={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-surface-elevated)'}
+                                onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                              >
+                                {staff.name} (@{staff.username})
+                              </button>
+                            ))
+                          )}
+                        </NeuCard>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Date Picker */}
+                <NeuDatePicker
+                  label="Date *"
+                  value={manualDate}
+                  onChange={(val) => setManualDate(val)}
+                  disabled={manualSubmitting}
+                />
+
+                {/* Time Pickers */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                  <NeuInput
+                    type="time"
+                    label="Check-In Time *"
+                    value={manualCheckIn}
+                    onChange={(e) => setManualCheckIn(e.target.value)}
+                    required
+                    disabled={manualSubmitting}
+                  />
+                  <NeuInput
+                    type="time"
+                    label="Check-Out Time (Optional)"
+                    value={manualCheckOut}
+                    onChange={(e) => setManualCheckOut(e.target.value)}
+                    disabled={manualSubmitting}
+                  />
+                </div>
+
+                {/* Status selector */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <label className="neu-input-label">Status *</label>
+                  <select
+                    value={manualStatus}
+                    onChange={(e) => setManualStatus(e.target.value)}
+                    className="neu-input"
+                    style={{
+                      width: '100%',
+                      height: '48px',
+                      padding: '0 16px',
+                      background: 'var(--bg-surface)',
+                      color: 'var(--text-primary)',
+                      border: '1px solid var(--border-color)',
+                      borderRadius: 'var(--border-radius-sm)',
+                      boxShadow: 'var(--neu-shadow-raised-sm)',
+                      fontFamily: 'var(--font-sans)',
+                      fontSize: '0.95rem',
+                      outline: 'none',
+                      cursor: 'pointer',
+                      boxSizing: 'border-box'
+                    }}
+                    required
+                    disabled={manualSubmitting}
+                  >
+                    <option value="present">Present</option>
+                    <option value="absent">Absent</option>
+                    <option value="late">Late</option>
+                  </select>
+                </div>
+
+                {/* Justification Note */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <label className="neu-input-label">Reason / Justification *</label>
+                  <textarea
+                    value={manualReason}
+                    onChange={(e) => setManualReason(e.target.value)}
+                    placeholder="Provide a mandatory reason (e.g. fingerprint scanner failed, staff forgot to check in)"
+                    style={{
+                      width: '100%',
+                      minHeight: '80px',
+                      padding: '12px 16px',
+                      background: 'var(--bg-surface)',
+                      color: 'var(--text-primary)',
+                      border: '1px solid var(--border-color)',
+                      borderRadius: 'var(--border-radius-sm)',
+                      boxShadow: 'var(--neu-shadow-raised-sm)',
+                      fontFamily: 'var(--font-sans)',
+                      fontSize: '0.95rem',
+                      outline: 'none',
+                      resize: 'vertical',
+                      boxSizing: 'border-box'
+                    }}
+                    required
+                    minLength={10}
+                    disabled={manualSubmitting}
+                  />
+                </div>
+
+                {/* Inline Error Block */}
+                {manualError && (
+                  <div style={{
+                    padding: '12px 16px',
+                    borderRadius: 'var(--border-radius-sm)',
+                    border: '1px solid var(--color-danger)',
+                    backgroundColor: 'rgba(239, 68, 68, 0.05)',
+                    color: 'var(--color-danger)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    fontSize: '0.9rem'
+                  }}>
+                    <AlertCircle size={18} />
+                    <span style={{ lineHeight: '1.4' }}>{manualError}</span>
+                  </div>
+                )}
+
+                {/* Form Buttons */}
+                <div style={{ display: 'flex', gap: '16px', marginTop: '12px' }}>
+                  <NeuButton
+                    type="button"
+                    onClick={() => setIsManualRecordModalOpen(false)}
+                    style={{ flex: 1, justifyContent: 'center' }}
+                    disabled={manualSubmitting}
+                  >
+                    Cancel
+                  </NeuButton>
+                  <NeuButton
+                    type="submit"
+                    variant="accent"
+                    style={{ flex: 1, justifyContent: 'center' }}
+                    disabled={manualSubmitting}
+                  >
+                    {manualSubmitting ? 'Saving...' : 'Save Record'}
+                  </NeuButton>
+                </div>
+              </form>
+            </NeuCard>
+          )}
         </div>
       )}
 
