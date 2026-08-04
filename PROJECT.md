@@ -126,6 +126,7 @@ To ensure complete operational integrity, transparency, and accountability:
 1.  **Soft-Deletes Only:** No client-side SDK is permitted to hard-delete attendance documents from Firestore. In the database rules, `allow delete` is blocked entirely. Adjustments that delete a record must set `isDeleted: true`. Queries listing records must exclude those with `isDeleted == true`.
 2.  **Immutability of Audit Logs:** The `/auditLogs` collection is immutable. Rules prohibit updates or deletions (`allow update, delete: if false;`) by anyone. This prevents the cover-up of modifications, preserving a reliable audit trail.
 3.  **Mandatory Reason Entry:** Every manual override (creating, editing, or deleting) requires the Admin to provide a textual reason, stored under the `reason` field in `auditLogs`.
+4.  **Governance Dashboard View:** Admins are equipped with a dedicated "Audit Log" route that details every manual creation, update, and soft-deletion. It features action badges, date/staff/action filters, and side-by-side difference comparison panels highlighting field changes. Regular staff accounts are blocked from accessing this view via both client navigation and route protection middleware.
 
 ---
 

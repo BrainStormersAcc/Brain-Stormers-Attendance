@@ -14,7 +14,8 @@ import {
   Lock,
   Smile,
   Check,
-  RefreshCw
+  RefreshCw,
+  ClipboardList
 } from 'lucide-react';
 import NeuThemeToggle from './NeuThemeToggle';
 import { useAuth } from '../../contexts/AuthContext.jsx';
@@ -47,6 +48,7 @@ function DashboardLayout() {
     if (path === '/staff-management') return 'staff';
     if (path === '/attendance-records') return 'records';
     if (path === '/admin-settings') return 'settings';
+    if (path === '/audit-log') return 'records';
     if (path.startsWith('/staff-attendance')) return 'attendance';
     return 'default';
   };
@@ -167,6 +169,7 @@ function DashboardLayout() {
     isAdmin && { name: 'Overview', path: '/', icon: LayoutDashboard },
     isAdmin && { name: 'Staff Account Management', path: '/staff-management', icon: Users },
     isAdmin && { name: 'Attendance Records', path: '/attendance-records', icon: Clock },
+    isAdmin && { name: 'Audit Log', path: '/audit-log', icon: ClipboardList },
     isAdmin && { name: 'Admin Settings', path: '/admin-settings', icon: Settings },
     (isStaff || isAdmin) && { name: 'Staff Attendance', path: '/staff-attendance', icon: Clock },
     { name: 'Student Portal (Under Construction)', path: '#', icon: GraduationCap, underConstruction: true },

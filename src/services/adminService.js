@@ -207,3 +207,26 @@ export const getAllAttendance = async () => {
     throw error;
   }
 };
+
+// Fetch all audit logs from Firestore auditLogs collection
+export const getAllAuditLogs = async () => {
+  try {
+    const auditLogsRef = collection(db, 'auditLogs');
+    const querySnapshot = await getDocs(auditLogsRef);
+    
+    const logs = [];
+    querySnapshot.forEach((doc) => {
+      logs.push({ id: doc.id, ...doc.data() });
+    });
+    
+    // Sort chronologically (most recent first)
+    return logs.sort((a, b) => {
+      const timeA = a.timestamp?.seconds || 0;
+      const timeB = b.timestamp?.seconds || 0;
+      return timeB - timeA;
+    });
+  } catch (error) {
+    console.error('Error in getAllAuditLogs:', error);
+    throw error;
+  }
+};

@@ -13,7 +13,9 @@ import {
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
-  X
+  X,
+  Edit,
+  Trash2
 } from 'lucide-react';
 import NeuCard from '../../../shared/components/NeuCard.jsx';
 import NeuButton from '../../../shared/components/NeuButton.jsx';
@@ -68,6 +70,16 @@ export default function StaffDashboard() {
   const [manualSubmitting, setManualSubmitting] = useState(false);
   const [manualSuccess, setManualSuccess] = useState(false);
   const [manualError, setManualError] = useState('');
+  const [manualModalMode, setManualModalMode] = useState('create'); // 'create' | 'edit'
+  const [editingRecord, setEditingRecord] = useState(null);
+
+  // Soft-Delete states
+  const [isDeleteConfirmModalOpen, setIsDeleteConfirmModalOpen] = useState(false);
+  const [deletingRecord, setDeletingRecord] = useState(null);
+  const [deleteReason, setDeleteReason] = useState('');
+  const [deleteError, setDeleteError] = useState('');
+  const [deleteSubmitting, setDeleteSubmitting] = useState(false);
+  const [deleteSuccess, setDeleteSuccess] = useState(false);
 
   // Refs for modal dropdowns and clicks outside
   const manualStaffDropdownRef = useRef(null);
@@ -233,6 +245,8 @@ export default function StaffDashboard() {
 
   // Form initialization helper
   const handleOpenManualRecordModal = () => {
+    setManualModalMode('create');
+    setEditingRecord(null);
     setManualStaff(null);
     setManualDate(getTodayDateString());
     setManualCheckIn('');
@@ -245,6 +259,33 @@ export default function StaffDashboard() {
     setIsManualRecordModalOpen(true);
   };
 
+  // Open edit modal pre-filled with record data
+  const handleOpenEditModal = (log) => {
+    const formatTimeInput = (timestamp) => {
+      if (!timestamp) return '';
+      const date = new Date(timestamp.seconds ? timestamp.seconds * 1000 : timestamp);
+      const hours = String(date.getHours()).padStart(2, '0');
+      const minutes = String(date.getMinutes()).padStart(2, '0');
+      return `${hours}:${minutes}`;
+    };
+
+    setManualModalMode('edit');
+    setEditingRecord(log);
+    
+    const staffName = staffNameMap[log.userId] || 'Unknown User';
+    setManualStaff({ uid: log.userId, name: staffName, username: '' });
+    setManualStaffSearch(staffName);
+
+    setManualDate(log.date);
+    setManualCheckIn(formatTimeInput(log.checkIn));
+    setManualCheckOut(formatTimeInput(log.checkOut));
+    setManualStatus(log.status);
+    setManualReason(''); // Must be freshly entered for this edit
+    setManualError('');
+    setManualSuccess(false);
+    setIsManualRecordModalOpen(true);
+  };
+
   // Select staff member from searchable dropdown
   const handleSelectManualStaff = (staff) => {
     setManualStaff(staff);
@@ -252,7 +293,7 @@ export default function StaffDashboard() {
     setIsManualStaffDropdownOpen(false);
   };
 
-  // Manual Adjustments Form Submission
+  // Manual Adjustments Form Submission (Supports Create and Edit modes)
   const handleCreateManualRecord = async (e) => {
     e.preventDefault();
     setManualError('');
@@ -292,17 +333,7 @@ export default function StaffDashboard() {
         return;
       }
 
-      // 2. Prevent duplicate entries
-      const duplicate = rawLogs.find(
-        log => log.userId === manualStaff.uid && log.date === manualDate && log.isDeleted !== true
-      );
-      if (duplicate) {
-        setManualError('An active attendance record already exists for this staff member on this date. Please EDIT the existing record instead.');
-        setManualSubmitting(false);
-        return;
-      }
-
-      // 3. Compile date & times
+      // 2. Compile date & times
       const parseTime = (timeStr) => {
         if (!timeStr) return null;
         const [hours, minutes] = timeStr.split(':').map(Number);
@@ -313,38 +344,192 @@ export default function StaffDashboard() {
       const checkInDate = parseTime(manualCheckIn);
       const checkOutDate = parseTime(manualCheckOut);
 
-      // 4. Firestore Batch Write Transaction
+      // 3. Firestore Batch Write Transaction
       const batch = writeBatch(db);
 
-      // A. Setup attendance document
-      const attendanceRef = doc(collection(db, 'attendance'));
-      const attendanceId = attendanceRef.id;
+      if (manualModalMode === 'edit' && editingRecord) {
+        // A. Setup attendance document reference for update
+        const attendanceRef = doc(db, 'attendance', editingRecord.id);
 
-      const newAttendanceData = {
-        userId: manualStaff.uid,
-        role: 'staff',
-        date: manualDate,
-        checkIn: checkInDate,
-        checkOut: checkOutDate || null,
-        status: manualStatus,
-        markedBy: 'admin-manual',
-        isDeleted: false
+        const updatedFields = {
+          checkIn: checkInDate,
+          checkOut: checkOutDate || null,
+          status: manualStatus,
+          lastEditedBy: currentUser.uid,
+          lastEditedAt: serverTimestamp()
+        };
+
+        batch.update(attendanceRef, updatedFields);
+
+        // Capture snapshot before changes
+        const previousData = {
+          userId: editingRecord.userId,
+          role: editingRecord.role,
+          date: editingRecord.date,
+          checkIn: editingRecord.checkIn,
+          checkOut: editingRecord.checkOut || null,
+          status: editingRecord.status,
+          markedBy: editingRecord.markedBy,
+          isDeleted: editingRecord.isDeleted || false,
+          ...(editingRecord.lastEditedBy ? { lastEditedBy: editingRecord.lastEditedBy } : {}),
+          ...(editingRecord.lastEditedAt ? { lastEditedAt: editingRecord.lastEditedAt } : {})
+        };
+
+        const newData = {
+          ...previousData,
+          checkIn: checkInDate,
+          checkOut: checkOutDate || null,
+          status: manualStatus,
+          lastEditedBy: currentUser.uid,
+          lastEditedAt: serverTimestamp()
+        };
+
+        // B. Setup auditLog document for update action
+        const auditLogRef = doc(collection(db, 'auditLogs'));
+        const auditLogData = {
+          action: 'update',
+          targetCollection: 'attendance',
+          targetDocId: editingRecord.id,
+          performedBy: currentUser.uid,
+          performedByName: userProfile?.name || 'Admin',
+          timestamp: serverTimestamp(),
+          reason: manualReason.trim(),
+          previousData: previousData,
+          newData: newData
+        };
+
+        batch.set(auditLogRef, auditLogData);
+
+      } else {
+        // CREATE Mode
+        // Prevent duplicate entries
+        const duplicate = rawLogs.find(
+          log => log.userId === manualStaff.uid && log.date === manualDate && log.isDeleted !== true
+        );
+        if (duplicate) {
+          setManualError('An active attendance record already exists for this staff member on this date. Please EDIT the existing record instead.');
+          setManualSubmitting(false);
+          return;
+        }
+
+        // A. Setup attendance document for creation
+        const attendanceRef = doc(collection(db, 'attendance'));
+        const attendanceId = attendanceRef.id;
+
+        const newAttendanceData = {
+          userId: manualStaff.uid,
+          role: 'staff',
+          date: manualDate,
+          checkIn: checkInDate,
+          checkOut: checkOutDate || null,
+          status: manualStatus,
+          markedBy: 'admin-manual',
+          isDeleted: false
+        };
+
+        batch.set(attendanceRef, newAttendanceData);
+
+        // B. Setup auditLog document for create action
+        const auditLogRef = doc(collection(db, 'auditLogs'));
+        const auditLogData = {
+          action: 'create',
+          targetCollection: 'attendance',
+          targetDocId: attendanceId,
+          performedBy: currentUser.uid,
+          performedByName: userProfile?.name || 'Admin',
+          timestamp: serverTimestamp(),
+          reason: manualReason.trim(),
+          previousData: null,
+          newData: newAttendanceData
+        };
+
+        batch.set(auditLogRef, auditLogData);
+      }
+
+      // Commit transaction batch
+      await batch.commit();
+
+      // 4. Success UI feedback & auto-close
+      setManualSuccess(true);
+      setTimeout(() => {
+        setIsManualRecordModalOpen(false);
+        setManualSuccess(false);
+      }, 2500);
+
+      // 5. Reload local dataset
+      await fetchRawData();
+
+    } catch (err) {
+      console.error('Error saving manual record:', err);
+      setManualError(err.message || 'Failed to save manual record.');
+    } finally {
+      setManualSubmitting(false);
+    }
+  };
+
+  // Open soft-delete confirmation modal
+  const handleOpenDeleteModal = (log) => {
+    setDeletingRecord(log);
+    setDeleteReason('');
+    setDeleteError('');
+    setDeleteSuccess(false);
+    setIsDeleteConfirmModalOpen(true);
+  };
+
+  // Confirm and commit soft-delete
+  const handleConfirmSoftDelete = async (e) => {
+    e.preventDefault();
+    setDeleteError('');
+    setDeleteSubmitting(true);
+
+    try {
+      if (!deleteReason || deleteReason.trim().length < 10) {
+        setDeleteError('Reason must be at least 10 characters long.');
+        setDeleteSubmitting(false);
+        return;
+      }
+
+      if (!deletingRecord) {
+        setDeleteError('No record selected for deletion.');
+        setDeleteSubmitting(false);
+        return;
+      }
+
+      const previousData = {
+        userId: deletingRecord.userId,
+        role: deletingRecord.role,
+        date: deletingRecord.date,
+        checkIn: deletingRecord.checkIn,
+        checkOut: deletingRecord.checkOut || null,
+        status: deletingRecord.status,
+        markedBy: deletingRecord.markedBy,
+        isDeleted: deletingRecord.isDeleted || false,
+        ...(deletingRecord.lastEditedBy ? { lastEditedBy: deletingRecord.lastEditedBy } : {}),
+        ...(deletingRecord.lastEditedAt ? { lastEditedAt: deletingRecord.lastEditedAt } : {})
       };
 
-      batch.set(attendanceRef, newAttendanceData);
+      const batch = writeBatch(db);
 
-      // B. Setup auditLog document
+      // A. Soft delete the attendance document
+      const attendanceRef = doc(db, 'attendance', deletingRecord.id);
+      batch.update(attendanceRef, {
+        isDeleted: true,
+        lastEditedBy: currentUser.uid,
+        lastEditedAt: serverTimestamp()
+      });
+
+      // B. Create auditLog document
       const auditLogRef = doc(collection(db, 'auditLogs'));
       const auditLogData = {
-        action: 'create',
+        action: 'delete',
         targetCollection: 'attendance',
-        targetDocId: attendanceId,
+        targetDocId: deletingRecord.id,
         performedBy: currentUser.uid,
         performedByName: userProfile?.name || 'Admin',
         timestamp: serverTimestamp(),
-        reason: manualReason.trim(),
-        previousData: null,
-        newData: newAttendanceData
+        reason: deleteReason.trim(),
+        previousData: previousData,
+        newData: null // newData is null for delete actions
       };
 
       batch.set(auditLogRef, auditLogData);
@@ -352,21 +537,22 @@ export default function StaffDashboard() {
       // Commit transaction batch
       await batch.commit();
 
-      // 5. Success UI feedback & auto-close
-      setManualSuccess(true);
+      // UI Success feedback and auto-close
+      setDeleteSuccess(true);
       setTimeout(() => {
-        setIsManualRecordModalOpen(false);
-        setManualSuccess(false);
+        setIsDeleteConfirmModalOpen(false);
+        setDeleteSuccess(false);
+        setDeletingRecord(null);
       }, 2500);
 
-      // 6. Reload local dataset
+      // Reload local datasets
       await fetchRawData();
 
     } catch (err) {
-      console.error('Error committing manual adjustment record:', err);
-      setManualError(err.message || 'Failed to submit manual record adjustment.');
+      console.error('Error soft-deleting attendance record:', err);
+      setDeleteError(err.message || 'Failed to soft-delete attendance record.');
     } finally {
-      setManualSubmitting(false);
+      setDeleteSubmitting(false);
     }
   };
 
@@ -1260,10 +1446,11 @@ export default function StaffDashboard() {
                     <th>Check-Out</th>
                     <th>Status</th>
                     {isAdmin && <th>Marked By</th>}
+                    {isAdmin && <th style={{ textAlign: 'center' }}>Actions</th>}
                   </tr>
                 </thead>
                 <tbody>
-                  {renderTableSkeleton(isAdmin ? 6 : 4)}
+                  {renderTableSkeleton(isAdmin ? 7 : 4)}
                 </tbody>
               </table>
             </div>
@@ -1286,6 +1473,7 @@ export default function StaffDashboard() {
                     <th>Check-Out</th>
                     <th>Status</th>
                     {isAdmin && <th>Marked By</th>}
+                    {isAdmin && <th style={{ textAlign: 'center' }}>Actions</th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -1306,7 +1494,94 @@ export default function StaffDashboard() {
                       </td>
                       {isAdmin && (
                         <td style={{ textTransform: 'capitalize', color: 'var(--text-secondary)' }}>
-                          {log.markedBy || 'manual'}
+                          <span>{log.markedBy || 'manual'}</span>
+                          {log.lastEditedBy && (
+                            <span 
+                              style={{ 
+                                marginLeft: '8px', 
+                                padding: '2px 6px', 
+                                borderRadius: '4px', 
+                                fontSize: '0.65rem', 
+                                fontWeight: 700, 
+                                backgroundColor: 'rgba(59, 130, 246, 0.1)', 
+                                color: '#3b82f6',
+                                border: '1px solid rgba(59, 130, 246, 0.25)',
+                                display: 'inline-block',
+                                verticalAlign: 'middle'
+                              }}
+                              title="Manually adjusted by Admin"
+                            >
+                              Edited
+                            </span>
+                          )}
+                        </td>
+                      )}
+                      {isAdmin && (
+                        <td style={{ textAlign: 'center' }}>
+                          <div style={{ display: 'inline-flex', gap: '10px', justifyContent: 'center', alignItems: 'center' }}>
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEditModal(log)}
+                              style={{
+                                background: 'none',
+                                border: 'none',
+                                cursor: 'pointer',
+                                color: 'var(--text-primary)',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                padding: '8px',
+                                borderRadius: 'var(--border-radius-sm)',
+                                boxShadow: 'var(--neu-shadow-raised-sm)',
+                                transition: 'all var(--transition-fast)',
+                                outline: 'none'
+                              }}
+                              onMouseOver={(e) => {
+                                e.currentTarget.style.boxShadow = 'var(--neu-shadow-pressed-sm)';
+                                e.currentTarget.style.color = 'var(--color-primary)';
+                              }}
+                              onMouseOut={(e) => {
+                                e.currentTarget.style.boxShadow = 'var(--neu-shadow-raised-sm)';
+                                e.currentTarget.style.color = 'var(--text-primary)';
+                              }}
+                              title="Edit Attendance Log"
+                            >
+                              <Edit size={14} />
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => handleOpenDeleteModal(log)}
+                              style={{
+                                background: 'none',
+                                border: 'none',
+                                cursor: 'pointer',
+                                color: 'var(--color-danger)',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                padding: '8px',
+                                borderRadius: 'var(--border-radius-sm)',
+                                boxShadow: 'var(--neu-shadow-raised-sm)',
+                                transition: 'all var(--transition-fast)',
+                                outline: 'none',
+                                opacity: 0.85
+                              }}
+                              onMouseOver={(e) => {
+                                e.currentTarget.style.boxShadow = 'var(--neu-shadow-pressed-sm)';
+                                e.currentTarget.style.color = '#ef4444';
+                                e.currentTarget.style.opacity = 1;
+                              }}
+                              onMouseOut={(e) => {
+                                e.currentTarget.style.boxShadow = 'var(--neu-shadow-raised-sm)';
+                                e.currentTarget.style.color = 'var(--color-danger)';
+                                e.currentTarget.style.opacity = 0.85;
+                              }}
+                              title="Delete Attendance Log"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
                         </td>
                       )}
                     </tr>
@@ -1359,10 +1634,61 @@ export default function StaffDashboard() {
                       borderTop: '1px dotted var(--border-color)', 
                       paddingTop: '8px', 
                       display: 'flex', 
-                      justifyContent: 'space-between' 
+                      justifyContent: 'space-between',
+                      alignItems: 'center'
                     }}>
-                      <span>Marked By:</span>
-                      <span style={{ textTransform: 'capitalize' }}>{log.markedBy || 'manual'}</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <span>Marked By:</span>
+                        <span style={{ textTransform: 'capitalize', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                          {log.markedBy || 'manual'}
+                        </span>
+                        {log.lastEditedBy && (
+                          <span 
+                            style={{ 
+                              padding: '1px 4px', 
+                              borderRadius: '3px', 
+                              fontSize: '0.6rem', 
+                              fontWeight: 700, 
+                              backgroundColor: 'rgba(59, 130, 246, 0.1)', 
+                              color: '#3b82f6',
+                              border: '1px solid rgba(59, 130, 246, 0.25)',
+                              marginLeft: '4px'
+                            }}
+                            title="Manually adjusted by Admin"
+                          >
+                            Edited
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <NeuButton 
+                          onClick={() => handleOpenEditModal(log)} 
+                          style={{ 
+                            padding: '4px 10px', 
+                            fontSize: '0.75rem', 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            gap: '4px' 
+                          }}
+                        >
+                          <Edit size={12} />
+                          <span>Edit</span>
+                        </NeuButton>
+                        <NeuButton 
+                          onClick={() => handleOpenDeleteModal(log)} 
+                          style={{ 
+                            padding: '4px 10px', 
+                            fontSize: '0.75rem', 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            gap: '4px',
+                            color: 'var(--color-danger)'
+                          }}
+                        >
+                          <Trash2 size={12} />
+                          <span>Delete</span>
+                        </NeuButton>
+                      </div>
                     </div>
                   )}
                 </NeuCard>
@@ -2387,109 +2713,121 @@ export default function StaffDashboard() {
                 margin: '0 auto',
                 color: 'var(--color-primary)'
               }}>
-                <Plus size={32} />
+                {manualModalMode === 'edit' ? <Edit size={28} /> : <Plus size={32} />}
               </div>
 
               <div>
                 <h3 style={{ fontSize: '1.5rem', fontFamily: 'var(--font-display)', marginBottom: '4px' }}>
-                  Add Manual Record
+                  {manualModalMode === 'edit' ? 'Edit Manual Record' : 'Add Manual Record'}
                 </h3>
                 <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
-                  Override or log manual entry for staff members.
+                  {manualModalMode === 'edit' ? 'Correct times or status of the existing log.' : 'Override or log manual entry for staff members.'}
                 </p>
               </div>
 
               <form onSubmit={handleCreateManualRecord} style={{ display: 'flex', flexDirection: 'column', gap: '20px', textAlign: 'left' }}>
-                {/* Searchable Staff Selector */}
-                <div ref={manualStaffDropdownRef} style={{ position: 'relative', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  <label className="neu-input-label">Select Staff Member *</label>
-                  <div style={{ position: 'relative' }}>
+                {/* Staff Selector */}
+                {manualModalMode === 'edit' ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <label className="neu-input-label">Staff Member</label>
                     <NeuInput
-                      placeholder="Type name or username..."
-                      value={manualStaffSearch}
-                      onChange={(e) => {
-                        if (manualStaff) setManualStaff(null);
-                        setManualStaffSearch(e.target.value);
-                        setIsManualStaffDropdownOpen(true);
-                      }}
-                      onFocus={() => setIsManualStaffDropdownOpen(true)}
-                      style={{ margin: 0 }}
-                      disabled={manualSubmitting}
+                      value={manualStaff?.name || ''}
+                      disabled={true}
+                      style={{ margin: 0, opacity: 0.8, cursor: 'not-allowed' }}
                     />
-                    {manualStaff && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setManualStaff(null);
-                          setManualStaffSearch('');
-                        }}
-                        style={{
-                          position: 'absolute',
-                          right: '16px',
-                          top: '50%',
-                          transform: 'translateY(-50%)',
-                          background: 'none',
-                          border: 'none',
-                          cursor: 'pointer',
-                          color: 'var(--text-secondary)',
-                          display: 'flex',
-                          alignItems: 'center'
-                        }}
-                      >
-                        <X size={16} />
-                      </button>
-                    )}
-                    {isManualStaffDropdownOpen && (
-                      <div style={{
-                        position: 'absolute',
-                        top: '52px',
-                        left: 0,
-                        right: 0,
-                        zIndex: 1010,
-                      }}>
-                        <NeuCard variant="raised" style={{ padding: '8px', display: 'flex', flexDirection: 'column', gap: '4px', maxHeight: '160px', overflowY: 'auto' }}>
-                          {matchedStaff.length === 0 ? (
-                            <div style={{ padding: '8px 12px', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-                              No active staff found
-                            </div>
-                          ) : (
-                            matchedStaff.map(staff => (
-                              <button
-                                key={staff.uid}
-                                type="button"
-                                onClick={() => handleSelectManualStaff(staff)}
-                                style={{
-                                  width: '100%',
-                                  padding: '8px 12px',
-                                  background: 'transparent',
-                                  border: 'none',
-                                  borderRadius: 'var(--border-radius-sm)',
-                                  textAlign: 'left',
-                                  color: 'var(--text-primary)',
-                                  fontSize: '0.875rem',
-                                  cursor: 'pointer',
-                                  outline: 'none',
-                                  transition: 'background-color var(--transition-fast)'
-                                }}
-                                onMouseOver={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-surface-elevated)'}
-                                onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                              >
-                                {staff.name} (@{staff.username})
-                              </button>
-                            ))
-                          )}
-                        </NeuCard>
-                      </div>
-                    )}
                   </div>
-                </div>
+                ) : (
+                  /* Searchable Staff Selector */
+                  <div ref={manualStaffDropdownRef} style={{ position: 'relative', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <label className="neu-input-label">Select Staff Member *</label>
+                    <div style={{ position: 'relative' }}>
+                      <NeuInput
+                        placeholder="Type name or username..."
+                        value={manualStaffSearch}
+                        onChange={(e) => {
+                          if (manualStaff) setManualStaff(null);
+                          setManualStaffSearch(e.target.value);
+                          setIsManualStaffDropdownOpen(true);
+                        }}
+                        onFocus={() => setIsManualStaffDropdownOpen(true)}
+                        style={{ margin: 0 }}
+                        disabled={manualSubmitting}
+                      />
+                      {manualStaff && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setManualStaff(null);
+                            setManualStaffSearch('');
+                          }}
+                          style={{
+                            position: 'absolute',
+                            right: '16px',
+                            top: '50%',
+                            transform: 'translateY(-50%)',
+                            background: 'none',
+                            border: 'none',
+                            cursor: 'pointer',
+                            color: 'var(--text-secondary)',
+                            display: 'flex',
+                            alignItems: 'center'
+                          }}
+                        >
+                          <X size={16} />
+                        </button>
+                      )}
+                      {isManualStaffDropdownOpen && (
+                        <div style={{
+                          position: 'absolute',
+                          top: '52px',
+                          left: 0,
+                          right: 0,
+                          zIndex: 1010,
+                        }}>
+                          <NeuCard variant="raised" style={{ padding: '8px', display: 'flex', flexDirection: 'column', gap: '4px', maxHeight: '160px', overflowY: 'auto' }}>
+                            {matchedStaff.length === 0 ? (
+                              <div style={{ padding: '8px 12px', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+                                No active staff found
+                              </div>
+                            ) : (
+                              matchedStaff.map(staff => (
+                                <button
+                                  key={staff.uid}
+                                  type="button"
+                                  onClick={() => handleSelectManualStaff(staff)}
+                                  style={{
+                                    width: '100%',
+                                    padding: '8px 12px',
+                                    background: 'transparent',
+                                    border: 'none',
+                                    borderRadius: 'var(--border-radius-sm)',
+                                    textAlign: 'left',
+                                    color: 'var(--text-primary)',
+                                    fontSize: '0.875rem',
+                                    cursor: 'pointer',
+                                    outline: 'none',
+                                    transition: 'background-color var(--transition-fast)'
+                                  }}
+                                  onMouseOver={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-surface-elevated)'}
+                                  onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                                >
+                                  {staff.name} (@{staff.username})
+                                </button>
+                              ))
+                            )}
+                          </NeuCard>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 {/* Date Picker */}
                 <NeuDatePicker
-                  label="Date *"
+                  label={manualModalMode === 'edit' ? "Date" : "Date *"}
                   value={manualDate}
                   onChange={(val) => setManualDate(val)}
-                  disabled={manualSubmitting}
+                  disabled={manualSubmitting || manualModalMode === 'edit'}
                 />
 
                 {/* Time Pickers */}
@@ -2605,6 +2943,201 @@ export default function StaffDashboard() {
                     disabled={manualSubmitting}
                   >
                     {manualSubmitting ? 'Saving...' : 'Save Record'}
+                  </NeuButton>
+                </div>
+              </form>
+            </NeuCard>
+          )}
+        </div>
+      )}
+
+      {/* Soft-Delete Confirmation Modal */}
+      {isDeleteConfirmModalOpen && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.6)',
+          backdropFilter: 'blur(8px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+          padding: '20px'
+        }}>
+          {deleteSuccess ? (
+            <NeuCard
+              variant="raised"
+              style={{
+                width: '100%',
+                maxWidth: '440px',
+                padding: '36px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '24px',
+                textAlign: 'center',
+                alignItems: 'center',
+                animation: 'scaleUpAndGlow 0.5s ease-out forwards'
+              }}
+            >
+              {/* Success Checkmark Circle */}
+              <div style={{
+                width: '80px',
+                height: '80px',
+                borderRadius: '50%',
+                backgroundColor: 'var(--bg-surface-elevated)',
+                boxShadow: 'var(--neu-shadow-pressed-sm)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: 'var(--color-danger)',
+              }}>
+                <CheckCircle2 size={48} />
+              </div>
+              <div>
+                <h3 style={{ fontSize: '1.5rem', fontFamily: 'var(--font-display)', marginBottom: '8px' }}>
+                  Record Deleted
+                </h3>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', lineHeight: '1.5' }}>
+                  The attendance record has been soft-deleted and logged in the immutable audit trail.
+                </p>
+              </div>
+            </NeuCard>
+          ) : (
+            <NeuCard
+              variant="raised"
+              style={{
+                width: '100%',
+                maxWidth: '440px',
+                position: 'relative',
+                padding: '36px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '24px',
+                textAlign: 'center'
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Close Button */}
+              <button 
+                onClick={() => setIsDeleteConfirmModalOpen(false)}
+                disabled={deleteSubmitting}
+                style={{
+                  position: 'absolute',
+                  top: '20px',
+                  right: '20px',
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  color: 'var(--text-secondary)'
+                }}
+              >
+                <X size={20} />
+              </button>
+
+              {/* Warning Trash Icon Circle */}
+              <div style={{
+                width: '64px',
+                height: '64px',
+                borderRadius: '50%',
+                backgroundColor: 'var(--bg-surface-elevated)',
+                boxShadow: 'var(--neu-shadow-pressed-sm)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                margin: '0 auto',
+                color: 'var(--color-danger)'
+              }}>
+                <Trash2 size={28} />
+              </div>
+
+              <div>
+                <h3 style={{ fontSize: '1.4rem', fontFamily: 'var(--font-display)', marginBottom: '8px' }}>
+                  Confirm Soft Deletion
+                </h3>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', lineHeight: '1.5' }}>
+                  You are about to soft-delete the attendance record for:
+                  <br />
+                  <strong style={{ color: 'var(--text-primary)' }}>
+                    {deletingRecord ? staffNameMap[deletingRecord.userId] : 'Unknown'}
+                  </strong> on <strong style={{ color: 'var(--text-primary)' }}>
+                    {deletingRecord ? formatDateLabel(deletingRecord.date) : ''}
+                  </strong>.
+                </p>
+              </div>
+
+              <form onSubmit={handleConfirmSoftDelete} style={{ display: 'flex', flexDirection: 'column', gap: '20px', textAlign: 'left' }}>
+                {/* Deletion justification Note */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <label className="neu-input-label">Reason for Deletion *</label>
+                  <textarea
+                    value={deleteReason}
+                    onChange={(e) => setDeleteReason(e.target.value)}
+                    placeholder="Provide a mandatory reason explaining why this log is being soft-deleted (min 10 chars)..."
+                    style={{
+                      width: '100%',
+                      minHeight: '80px',
+                      padding: '12px 16px',
+                      background: 'var(--bg-surface)',
+                      color: 'var(--text-primary)',
+                      border: '1px solid var(--border-color)',
+                      borderRadius: 'var(--border-radius-sm)',
+                      boxShadow: 'var(--neu-shadow-raised-sm)',
+                      fontFamily: 'var(--font-sans)',
+                      fontSize: '0.95rem',
+                      outline: 'none',
+                      resize: 'vertical',
+                      boxSizing: 'border-box'
+                    }}
+                    required
+                    minLength={10}
+                    disabled={deleteSubmitting}
+                  />
+                </div>
+
+                {/* Inline error block */}
+                {deleteError && (
+                  <div style={{
+                    padding: '12px 16px',
+                    borderRadius: 'var(--border-radius-sm)',
+                    border: '1px solid var(--color-danger)',
+                    backgroundColor: 'rgba(239, 68, 68, 0.05)',
+                    color: 'var(--color-danger)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    fontSize: '0.9rem'
+                  }}>
+                    <AlertCircle size={18} />
+                    <span style={{ lineHeight: '1.4' }}>{deleteError}</span>
+                  </div>
+                )}
+
+                {/* Form Action buttons */}
+                <div style={{ display: 'flex', gap: '16px', marginTop: '8px' }}>
+                  <NeuButton
+                    type="button"
+                    onClick={() => setIsDeleteConfirmModalOpen(false)}
+                    style={{ flex: 1, justifyContent: 'center' }}
+                    disabled={deleteSubmitting}
+                  >
+                    Cancel
+                  </NeuButton>
+                  <NeuButton
+                    type="submit"
+                    style={{ 
+                      flex: 1, 
+                      justifyContent: 'center',
+                      backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                      color: 'var(--color-danger)',
+                      border: '1px solid rgba(239, 68, 68, 0.3)',
+                      boxShadow: 'var(--neu-shadow-raised-sm)'
+                    }}
+                    disabled={deleteSubmitting}
+                  >
+                    {deleteSubmitting ? 'Deleting...' : 'Confirm Delete'}
                   </NeuButton>
                 </div>
               </form>

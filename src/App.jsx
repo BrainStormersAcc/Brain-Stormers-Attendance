@@ -5,6 +5,7 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import Login from './pages/Login';
 import DashboardLayout from './shared/components/DashboardLayout';
 import DashboardHome from './pages/DashboardHome';
+import AuditLog from './pages/AuditLog';
 import NotFound from './pages/NotFound';
 import StyleGuide from './pages/StyleGuide';
 
@@ -62,6 +63,14 @@ function App() {
             element={
               <ProtectedRoute requiredRole="admin">
                 <DashboardHome view="admin-settings" />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="audit-log" 
+            element={
+              <ProtectedRoute requiredRole="admin">
+                <AuditLog />
               </ProtectedRoute>
             } 
           />
