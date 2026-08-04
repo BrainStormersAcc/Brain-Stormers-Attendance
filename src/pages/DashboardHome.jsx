@@ -16,8 +16,10 @@ import {
   Trash2,
   Eye,
   EyeOff,
-  ChevronDown
+  ChevronDown,
+  Settings
 } from 'lucide-react';
+import NeuSegmentedControl from '../shared/components/NeuSegmentedControl.jsx';
 import NeuCard from '../shared/components/NeuCard.jsx';
 import NeuButton from '../shared/components/NeuButton.jsx';
 import NeuInput from '../shared/components/NeuInput.jsx';
@@ -77,7 +79,7 @@ export default function DashboardHome(props) {
       setTimeout(() => setSuccess(''), 3000);
     } catch (err) {
       console.error('Admin profile update failed:', err);
-      if (err.code === 'auth/wrong-password') {
+      if (err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
         setError('Incorrect current password.');
       } else {
         setError(err.message || 'Failed to update admin profile.');
@@ -117,6 +119,7 @@ export default function DashboardHome(props) {
   const [dateStart, setDateStart] = useState('');
   const [dateEnd, setDateEnd] = useState('');
   const [filterStaff, setFilterStaff] = useState('');
+  const [recordsTarget, setRecordsTarget] = useState('Staff');
 
   // Fetch initial data
   const fetchData = async () => {
@@ -387,73 +390,170 @@ export default function DashboardHome(props) {
           )
         ) : (
           <>
-            {/* VIEW: OVERVIEW */}
             {activeTab === 'overview' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
-            {/* Stats Cards Section */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '24px' }}>
-              <NeuCard variant="raised" style={{ padding: '24px', display: 'flex', gap: '20px', alignItems: 'center' }}>
-                <div style={{
-                  width: '54px',
-                  height: '54px',
-                  borderRadius: 'var(--border-radius-md)',
-                  backgroundColor: 'var(--bg-surface-elevated)',
-                  boxShadow: 'var(--neu-shadow-pressed-sm)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: 'var(--color-primary)'
-                }}>
-                  <Clock size={24} />
-                </div>
-                <div>
-                  <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Staff Present Today</p>
-                  <h3 style={{ fontSize: '1.75rem', fontWeight: 700 }}>
-                    {presentCount} / {activeStaffCount}
-                  </h3>
-                </div>
-              </NeuCard>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
+                
+                {/* Embedded animations for the under development red glass hover overlay */}
+                <style>{`
+                  .under-dev-card {
+                    position: relative;
+                    overflow: hidden;
+                    transition: border-color var(--transition-normal), box-shadow var(--transition-normal), transform var(--transition-normal) !important;
+                  }
+                  .under-dev-card:hover {
+                    transform: translateY(-2px);
+                    box-shadow: 0 12px 24px rgba(239, 68, 68, 0.08), var(--neu-shadow-raised-sm) !important;
+                    border-color: rgba(239, 68, 68, 0.35) !important;
+                  }
+                  .under-dev-overlay {
+                    position: absolute;
+                    top: 0;
+                    left: 0;
+                    right: 0;
+                    bottom: 0;
+                    background: rgba(239, 68, 68, 0.08);
+                    backdrop-filter: blur(4px);
+                    -webkit-backdrop-filter: blur(4px);
+                    display: flex;
+                    align-items: center;
+                    justifyContent: center;
+                    opacity: 0;
+                    transition: opacity 0.25s ease, transform 0.25s ease;
+                    transform: scale(0.95);
+                    pointer-events: none;
+                    border-radius: inherit;
+                    z-index: 5;
+                  }
+                  .under-dev-card:hover .under-dev-overlay {
+                    opacity: 1;
+                    transform: scale(1);
+                  }
+                  .under-dev-text {
+                    color: var(--color-danger);
+                    font-weight: 700;
+                    font-family: var(--font-display);
+                    font-size: 0.85rem;
+                    letter-spacing: 0.8px;
+                    text-transform: uppercase;
+                    background: rgba(239, 68, 68, 0.12);
+                    padding: 6px 14px;
+                    border-radius: 20px;
+                    border: 1px solid rgba(239, 68, 68, 0.25);
+                    box-shadow: 0 4px 12px rgba(239, 68, 68, 0.15);
+                  }
+                `}</style>
 
-              <NeuCard variant="raised" style={{ padding: '24px', display: 'flex', gap: '20px', alignItems: 'center' }}>
-                <div style={{
-                  width: '54px',
-                  height: '54px',
-                  borderRadius: 'var(--border-radius-md)',
-                  backgroundColor: 'var(--bg-surface-elevated)',
-                  boxShadow: 'var(--neu-shadow-pressed-sm)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: 'var(--color-accent)'
-                }}>
-                  <GraduationCap size={24} />
-                </div>
-                <div>
-                  <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Students Checked In</p>
-                  <h3 style={{ fontSize: '1.75rem', fontWeight: 700 }}>0 / 0</h3>
-                </div>
-              </NeuCard>
+                {/* Stats Cards Section */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '24px' }}>
+                  
+                  {/* Staff Card - Active */}
+                  <NeuCard variant="raised" style={{ padding: '24px', display: 'flex', gap: '20px', alignItems: 'center' }}>
+                    <div style={{
+                      width: '54px',
+                      height: '54px',
+                      borderRadius: 'var(--border-radius-md)',
+                      backgroundColor: 'var(--bg-surface-elevated)',
+                      boxShadow: 'var(--neu-shadow-pressed-sm)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: 'var(--color-primary)'
+                    }}>
+                      <Clock size={24} />
+                    </div>
+                    <div>
+                      <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Staff Present Today</p>
+                      <h3 style={{ fontSize: '1.75rem', fontWeight: 700 }}>
+                        {presentCount} / {activeStaffCount}
+                      </h3>
+                    </div>
+                  </NeuCard>
 
-              <NeuCard variant="raised" style={{ padding: '24px', display: 'flex', gap: '20px', alignItems: 'center' }}>
-                <div style={{
-                  width: '54px',
-                  height: '54px',
-                  borderRadius: 'var(--border-radius-md)',
-                  backgroundColor: 'var(--bg-surface-elevated)',
-                  boxShadow: 'var(--neu-shadow-pressed-sm)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: 'var(--color-success)'
-                }}>
-                  <Calendar size={24} />
+                  {/* Student Card - Under Dev */}
+                  <NeuCard 
+                    variant="raised" 
+                    className="under-dev-card"
+                    style={{ padding: '24px', display: 'flex', gap: '20px', alignItems: 'center' }}
+                  >
+                    <div className="under-dev-overlay">
+                      <span className="under-dev-text">Under Development</span>
+                    </div>
+                    <div style={{
+                      width: '54px',
+                      height: '54px',
+                      borderRadius: 'var(--border-radius-md)',
+                      backgroundColor: 'var(--bg-surface-elevated)',
+                      boxShadow: 'var(--neu-shadow-pressed-sm)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: 'var(--color-accent)'
+                    }}>
+                      <GraduationCap size={24} />
+                    </div>
+                    <div>
+                      <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Students Checked In</p>
+                      <h3 style={{ fontSize: '1.75rem', fontWeight: 700 }}>0 / 0</h3>
+                    </div>
+                  </NeuCard>
+
+                  {/* Classes Card - Under Dev */}
+                  <NeuCard 
+                    variant="raised" 
+                    className="under-dev-card"
+                    style={{ padding: '24px', display: 'flex', gap: '20px', alignItems: 'center' }}
+                  >
+                    <div className="under-dev-overlay">
+                      <span className="under-dev-text">Under Development</span>
+                    </div>
+                    <div style={{
+                      width: '54px',
+                      height: '54px',
+                      borderRadius: 'var(--border-radius-md)',
+                      backgroundColor: 'var(--bg-surface-elevated)',
+                      boxShadow: 'var(--neu-shadow-pressed-sm)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: 'var(--color-success)'
+                    }}>
+                      <Calendar size={24} />
+                    </div>
+                    <div>
+                      <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Active Classes</p>
+                      <h3 style={{ fontSize: '1.75rem', fontWeight: 700 }}>12 Classes</h3>
+                    </div>
+                  </NeuCard>
+
+                  {/* Teacher Card - Under Dev */}
+                  <NeuCard 
+                    variant="raised" 
+                    className="under-dev-card"
+                    style={{ padding: '24px', display: 'flex', gap: '20px', alignItems: 'center' }}
+                  >
+                    <div className="under-dev-overlay">
+                      <span className="under-dev-text">Under Development</span>
+                    </div>
+                    <div style={{
+                      width: '54px',
+                      height: '54px',
+                      borderRadius: 'var(--border-radius-md)',
+                      backgroundColor: 'var(--bg-surface-elevated)',
+                      boxShadow: 'var(--neu-shadow-pressed-sm)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: 'var(--color-warning)'
+                    }}>
+                      <Users size={24} />
+                    </div>
+                    <div>
+                      <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Teacher Checked in</p>
+                      <h3 style={{ fontSize: '1.75rem', fontWeight: 700 }}>0 / 0</h3>
+                    </div>
+                  </NeuCard>
+
                 </div>
-                <div>
-                  <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Active Batches Today</p>
-                  <h3 style={{ fontSize: '1.75rem', fontWeight: 700 }}>12 Classes</h3>
-                </div>
-              </NeuCard>
-            </div>
 
             {/* Quick Access Block */}
             <NeuCard variant="raised" style={{ padding: '32px' }}>
@@ -498,38 +598,45 @@ export default function DashboardHome(props) {
                   placeholder="e.g. +1234567890"
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
-                  required
                   disabled={creating}
                 />
                 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  <label className="neu-input-label">Password</label>
-                  <div style={{ display: 'flex', gap: '10px' }}>
-                    <div style={{ flex: 1 }}>
-                      <NeuInput
-                        type="text"
-                        placeholder="Credentials password"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        required
+                <div style={{ 
+                  gridColumn: '1 / -1', 
+                  display: 'flex', 
+                  justifyContent: 'space-between', 
+                  alignItems: 'end', 
+                  flexWrap: 'wrap', 
+                  gap: '20px',
+                  marginTop: '10px' 
+                }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', width: '100%', maxWidth: '360px' }}>
+                    <label className="neu-input-label">Password</label>
+                    <div style={{ display: 'flex', gap: '10px' }}>
+                      <div style={{ flex: 1 }}>
+                        <NeuInput
+                          type="password"
+                          placeholder="Credentials password"
+                          value={password}
+                          onChange={(e) => setPassword(e.target.value)}
+                          required
+                          disabled={creating}
+                          style={{ margin: 0 }}
+                        />
+                      </div>
+                      <NeuButton 
+                        type="button" 
+                        onClick={generateTempPassword} 
+                        title="Generate and copy password"
+                        style={{ padding: '12px' }}
                         disabled={creating}
-                        style={{ margin: 0 }}
-                      />
+                      >
+                        {copySuccess ? <Check size={18} style={{ color: 'var(--color-success)' }} /> : <Copy size={18} />}
+                      </NeuButton>
                     </div>
-                    <NeuButton 
-                      type="button" 
-                      onClick={generateTempPassword} 
-                      title="Generate and copy password"
-                      style={{ padding: '12px' }}
-                      disabled={creating}
-                    >
-                      {copySuccess ? <Check size={18} style={{ color: 'var(--color-success)' }} /> : <Copy size={18} />}
-                    </NeuButton>
                   </div>
-                </div>
 
-                <div style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'flex-end', marginTop: '10px' }}>
-                  <NeuButton type="submit" variant="accent" disabled={creating}>
+                  <NeuButton type="submit" variant="accent" disabled={creating} style={{ height: '48px' }}>
                     {creating ? 'Registering...' : 'Register User'}
                   </NeuButton>
                 </div>
@@ -633,142 +740,273 @@ export default function DashboardHome(props) {
         {activeTab === 'records' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
             
-            {/* Filter Panel */}
-            <NeuCard variant="raised" style={{ padding: '24px' }}>
-              <h4 style={{ fontSize: '1rem', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Filter size={16} style={{ color: 'var(--color-primary)' }} />
-                <span>Filter Records</span>
-              </h4>
+            {/* Embedded Animations Style Block */}
+            <style>{`
+              @keyframes spin-clockwise {
+                from { transform: rotate(0deg); }
+                to { transform: rotate(360deg); }
+              }
+              @keyframes spin-counter {
+                from { transform: rotate(360deg); }
+                to { transform: rotate(0deg); }
+              }
+              @keyframes neu-progress-loading {
+                0% { left: -40%; width: 40%; }
+                50% { left: 100%; width: 20%; }
+                100% { left: -40%; width: 40%; }
+              }
+              @keyframes float {
+                0%, 100% { transform: translateY(0); }
+                50% { transform: translateY(-8px); }
+              }
+              .cog-clockwise {
+                animation: spin-clockwise 8s linear infinite;
+              }
+              .cog-counter {
+                animation: spin-counter 6s linear infinite;
+              }
+              .float-card {
+                animation: float 4s ease-in-out infinite;
+              }
+            `}</style>
 
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px' }}>
-                
-                {/* Staff Filter Dropdown */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  <label className="neu-input-label">Staff Member</label>
-                  <div style={{ position: 'relative', width: '100%' }}>
-                    <select 
-                      value={filterStaff}
-                      onChange={(e) => setFilterStaff(e.target.value)}
-                      style={{
-                        width: '100%',
-                        padding: '12px 36px 12px 16px',
-                        background: 'var(--bg-surface)',
-                        color: 'var(--text-primary)',
-                        border: '1px solid var(--border-color)',
-                        borderRadius: 'var(--border-radius-sm)',
-                        boxShadow: 'var(--neu-shadow-pressed-sm)',
-                        fontFamily: 'var(--font-sans)',
-                        fontSize: '0.95rem',
-                        outline: 'none',
-                        transition: 'border-color var(--transition-normal)',
-                        appearance: 'none',
-                        WebkitAppearance: 'none',
-                        MozAppearance: 'none'
-                      }}
-                    >
-                      <option value="">All Staff</option>
-                      {staffList.map(s => (
-                        <option key={s.uid} value={s.uid}>{s.name}</option>
-                      ))}
-                    </select>
+            {/* Target Selector Switcher */}
+            <div style={{ display: 'flex', justifyContent: 'flex-start', margin: '4px 0 12px 0' }}>
+              <NeuSegmentedControl
+                options={['Staff', 'Student', 'Teacher']}
+                selectedValue={recordsTarget}
+                onChange={setRecordsTarget}
+              />
+            </div>
+
+            {recordsTarget !== 'Staff' ? (
+              <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '40px 20px', minHeight: '400px' }}>
+                <NeuCard variant="raised" style={{ 
+                  maxWidth: '500px', 
+                  width: '100%', 
+                  padding: '48px', 
+                  display: 'flex', 
+                  flexDirection: 'column', 
+                  alignItems: 'center', 
+                  gap: '28px',
+                  textAlign: 'center',
+                }} className="float-card">
+                  
+                  {/* Charming Neumorphic Cogs Animation */}
+                  <div style={{ position: 'relative', width: '120px', height: '120px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                    {/* Background Bevel Ring */}
                     <div style={{
                       position: 'absolute',
-                      right: '16px',
-                      top: '50%',
-                      transform: 'translateY(-50%)',
+                      width: '100px',
+                      height: '100px',
+                      borderRadius: '50%',
+                      backgroundColor: 'var(--bg-base)',
+                      boxShadow: 'var(--neu-shadow-pressed)',
+                      zIndex: 0
+                    }} />
+                    
+                    {/* Primary Gear (Big) */}
+                    <div className="cog-clockwise" style={{
+                      position: 'absolute',
+                      color: 'var(--color-primary)',
+                      zIndex: 2,
                       display: 'flex',
                       alignItems: 'center',
-                      pointerEvents: 'none',
-                      color: 'var(--text-secondary)'
+                      justifyContent: 'center',
+                      filter: 'drop-shadow(var(--neu-shadow-raised-sm))'
                     }}>
-                      <ChevronDown size={16} />
+                      <Settings size={56} strokeWidth={1.5} />
+                    </div>
+
+                    {/* Secondary Gear (Small, interlocking) */}
+                    <div className="cog-counter" style={{
+                      position: 'absolute',
+                      color: 'var(--color-accent)',
+                      top: '12px',
+                      right: '12px',
+                      zIndex: 1,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      filter: 'drop-shadow(var(--neu-shadow-raised-sm))'
+                    }}>
+                      <Settings size={36} strokeWidth={1.5} />
                     </div>
                   </div>
-                </div>
 
-                {/* Start Date */}
-                <NeuDatePicker
-                  label="Start Date"
-                  value={dateStart}
-                  onChange={setDateStart}
-                />
+                  <div>
+                    <h3 style={{ fontSize: '1.5rem', fontFamily: 'var(--font-display)', marginBottom: '10px', color: 'var(--text-primary)' }}>
+                      {recordsTarget} Attendance Records
+                    </h3>
+                    <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', lineHeight: '1.6' }}>
+                      Attendance tracking, history listings, and record search for the <strong>{recordsTarget}</strong> module are under development.
+                    </p>
+                    <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: '6px' }}>
+                      Scheduled for implementation in Phase 2 & 3 of the system roadmap.
+                    </p>
+                  </div>
 
-                {/* End Date */}
-                <NeuDatePicker
-                  label="End Date"
-                  value={dateEnd}
-                  onChange={setDateEnd}
-                />
+                  {/* Neumorphic Loading/Progress Track */}
+                  <div style={{
+                    position: 'relative',
+                    width: '240px',
+                    height: '8px',
+                    backgroundColor: 'var(--bg-base)',
+                    boxShadow: 'var(--neu-shadow-pressed-sm)',
+                    borderRadius: 'var(--border-radius-full)',
+                    overflow: 'hidden'
+                  }}>
+                    <div style={{
+                      position: 'absolute',
+                      top: 0,
+                      height: '100%',
+                      backgroundColor: 'var(--color-primary)',
+                      boxShadow: '0 0 8px var(--color-primary-glow)',
+                      borderRadius: 'var(--border-radius-full)',
+                      animation: 'neu-progress-loading 2.5s ease-in-out infinite'
+                    }} />
+                  </div>
 
-                {/* Reset Filters */}
-                <div style={{ display: 'flex', alignItems: 'flex-end' }}>
-                  <NeuButton 
-                    onClick={() => {
-                      setFilterStaff('');
-                      setDateStart('');
-                      setDateEnd('');
-                    }}
-                    style={{ width: '100%' }}
-                  >
-                    Reset Filters
-                  </NeuButton>
-                </div>
-
+                </NeuCard>
               </div>
-            </NeuCard>
+            ) : (
+              <>
+                {/* Filter Panel */}
+                <NeuCard variant="raised" style={{ padding: '24px' }}>
+                  <h4 style={{ fontSize: '1rem', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Filter size={16} style={{ color: 'var(--color-primary)' }} />
+                    <span>Filter Records</span>
+                  </h4>
 
-            {/* Logs Table */}
-            <NeuCard variant="raised" style={{ padding: '32px', overflowX: 'auto' }}>
-              <h3 style={{ fontSize: '1.25rem', marginBottom: '20px', fontFamily: 'var(--font-display)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Clock size={18} style={{ color: 'var(--color-primary)' }} />
-                <span>Attendance Logs Register</span>
-              </h3>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px' }}>
+                    
+                    {/* Staff Filter Dropdown */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      <label className="neu-input-label">Staff Member</label>
+                      <div style={{ position: 'relative', width: '100%' }}>
+                        <select 
+                          value={filterStaff}
+                          onChange={(e) => setFilterStaff(e.target.value)}
+                          style={{
+                            width: '100%',
+                            padding: '12px 36px 12px 16px',
+                            background: 'var(--bg-surface)',
+                            color: 'var(--text-primary)',
+                            border: '1px solid var(--border-color)',
+                            borderRadius: 'var(--border-radius-sm)',
+                            boxShadow: 'var(--neu-shadow-pressed-sm)',
+                            fontFamily: 'var(--font-sans)',
+                            fontSize: '0.95rem',
+                            outline: 'none',
+                            transition: 'border-color var(--transition-normal)',
+                            appearance: 'none',
+                            WebkitAppearance: 'none',
+                            MozAppearance: 'none'
+                          }}
+                        >
+                          <option value="">All Staff</option>
+                          {staffList.map(s => (
+                            <option key={s.uid} value={s.uid}>{s.name}</option>
+                          ))}
+                        </select>
+                        <div style={{
+                          position: 'absolute',
+                          right: '16px',
+                          top: '50%',
+                          transform: 'translateY(-50%)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          pointerEvents: 'none',
+                          color: 'var(--text-secondary)'
+                        }}>
+                          <ChevronDown size={16} />
+                        </div>
+                      </div>
+                    </div>
 
-              {filteredLogs.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-secondary)' }}>
-                  No attendance records match the selected filters.
-                </div>
-              ) : (
-                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '700px' }}>
-                  <thead>
-                    <tr style={{ borderBottom: '1px solid var(--border-color)', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
-                      <th style={{ padding: '12px 16px' }}>Name</th>
-                      <th style={{ padding: '12px 16px' }}>Date</th>
-                      <th style={{ padding: '12px 16px' }}>Check-In</th>
-                      <th style={{ padding: '12px 16px' }}>Check-Out</th>
-                      <th style={{ padding: '12px 16px' }}>Status</th>
-                      <th style={{ padding: '12px 16px' }}>Source</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredLogs.map((log) => {
-                      const staffMember = staffList.find(s => s.uid === log.userId);
-                      const name = staffMember ? staffMember.name : 'Unknown User';
-                      
-                      let statusColor = 'var(--text-primary)';
-                      if (log.status === 'present') statusColor = 'var(--color-success)';
-                      if (log.status === 'late') statusColor = 'var(--color-warning)';
-                      if (log.status === 'absent') statusColor = 'var(--color-danger)';
+                    {/* Start Date */}
+                    <NeuDatePicker
+                      label="Start Date"
+                      value={dateStart}
+                      onChange={setDateStart}
+                    />
 
-                      return (
-                        <tr key={log.id} style={{ borderBottom: '1px solid var(--border-color)', fontSize: '0.95rem' }}>
-                          <td style={{ padding: '16px', fontWeight: 500 }}>{name}</td>
-                          <td style={{ padding: '16px' }}>{log.date}</td>
-                          <td style={{ padding: '16px' }}>{formatTime(log.checkIn)}</td>
-                          <td style={{ padding: '16px' }}>{formatTime(log.checkOut)}</td>
-                          <td style={{ padding: '16px', fontWeight: 600, color: statusColor, textTransform: 'capitalize' }}>
-                            {log.status}
-                          </td>
-                          <td style={{ padding: '16px', color: 'var(--text-muted)', textTransform: 'capitalize' }}>
-                            {log.markedBy || 'manual'}
-                          </td>
+                    {/* End Date */}
+                    <NeuDatePicker
+                      label="End Date"
+                      value={dateEnd}
+                      onChange={setDateEnd}
+                    />
+
+                    {/* Reset Filters */}
+                    <div style={{ display: 'flex', alignItems: 'flex-end' }}>
+                      <NeuButton 
+                        onClick={() => {
+                          setFilterStaff('');
+                          setDateStart('');
+                          setDateEnd('');
+                        }}
+                        style={{ width: '100%' }}
+                      >
+                        Reset Filters
+                      </NeuButton>
+                    </div>
+
+                  </div>
+                </NeuCard>
+
+                {/* Logs Table */}
+                <NeuCard variant="raised" style={{ padding: '32px', overflowX: 'auto' }}>
+                  <h3 style={{ fontSize: '1.25rem', marginBottom: '20px', fontFamily: 'var(--font-display)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Clock size={18} style={{ color: 'var(--color-primary)' }} />
+                    <span>Attendance Logs Register</span>
+                  </h3>
+
+                  {filteredLogs.length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-secondary)' }}>
+                      No attendance records match the selected filters.
+                    </div>
+                  ) : (
+                    <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '700px' }}>
+                      <thead>
+                        <tr style={{ borderBottom: '1px solid var(--border-color)', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+                          <th style={{ padding: '12px 16px' }}>Name</th>
+                          <th style={{ padding: '12px 16px' }}>Date</th>
+                          <th style={{ padding: '12px 16px' }}>Check-In</th>
+                          <th style={{ padding: '12px 16px' }}>Status</th>
+                          <th style={{ padding: '12px 16px' }}>Source</th>
                         </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              )}
-            </NeuCard>
+                      </thead>
+                      <tbody>
+                        {filteredLogs.map((log) => {
+                          const staffMember = staffList.find(s => s.uid === log.userId);
+                          const name = staffMember ? staffMember.name : 'Unknown User';
+                          
+                          let statusColor = 'var(--text-primary)';
+                          if (log.status === 'present') statusColor = 'var(--color-success)';
+                          if (log.status === 'late') statusColor = 'var(--color-warning)';
+                          if (log.status === 'absent') statusColor = 'var(--color-danger)';
+
+                          return (
+                            <tr key={log.id} style={{ borderBottom: '1px solid var(--border-color)', fontSize: '0.95rem' }}>
+                              <td style={{ padding: '16px', fontWeight: 500 }}>{name}</td>
+                              <td style={{ padding: '16px' }}>{log.date}</td>
+                              <td style={{ padding: '16px' }}>{formatTime(log.checkIn)}</td>
+                              <td style={{ padding: '16px', fontWeight: 600, color: statusColor, textTransform: 'capitalize' }}>
+                                {log.status}
+                              </td>
+                              <td style={{ padding: '16px', color: 'var(--text-muted)', textTransform: 'capitalize' }}>
+                                {log.markedBy || 'manual'}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  )}
+                </NeuCard>
+              </>
+            )}
 
           </div>
         )}
@@ -791,19 +1029,17 @@ export default function DashboardHome(props) {
                 disabled={updatingAdmin}
               />
               <NeuInput
-                label="Username"
+                label="Username (Cannot be changed)"
                 placeholder="e.g. admin"
                 value={adminUsername}
-                onChange={(e) => setAdminUsername(e.target.value)}
-                required
-                disabled={updatingAdmin}
+                disabled={true}
+                style={{ opacity: 0.7, cursor: 'not-allowed' }}
               />
               <NeuInput
                 label="Phone Number"
                 placeholder="e.g. +1234567890"
                 value={adminPhone}
                 onChange={(e) => setAdminPhone(e.target.value)}
-                required
                 disabled={updatingAdmin}
               />
               <NeuInput
@@ -899,18 +1135,16 @@ export default function DashboardHome(props) {
               />
               
               <NeuInput
-                label="Username"
+                label="Username (Cannot be changed)"
                 value={editUsername}
-                onChange={(e) => setEditUsername(e.target.value)}
-                required
-                disabled={updating}
+                disabled={true}
+                style={{ opacity: 0.7, cursor: 'not-allowed' }}
               />
 
               <NeuInput
                 label="Phone Number"
                 value={editPhone}
                 onChange={(e) => setEditPhone(e.target.value)}
-                required
                 disabled={updating}
               />
 

@@ -152,7 +152,7 @@ function DashboardLayout() {
       }, 1500);
     } catch (err) {
       console.error('Password update failure:', err);
-      if (err.code === 'auth/wrong-password') {
+      if (err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
         setPassError('Incorrect current password.');
       } else {
         setPassError(err.message || 'Failed to update password.');
@@ -166,15 +166,58 @@ function DashboardLayout() {
   const isStaff = userProfile?.role === 'staff';
 
   const navItems = [
-    isAdmin && { name: 'Overview', path: '/', icon: LayoutDashboard },
+    (isStaff || isAdmin) && { name: 'Overview', path: '/', icon: LayoutDashboard },
     isAdmin && { name: 'Staff Account Management', path: '/staff-management', icon: Users },
-    isAdmin && { name: 'Attendance Records', path: '/attendance-records', icon: Clock },
-    isAdmin && { name: 'Audit Log', path: '/audit-log', icon: ClipboardList },
+    (isStaff || isAdmin) && { name: 'Attendance Records', path: '/attendance-records', icon: Clock },
     isAdmin && { name: 'Admin Settings', path: '/admin-settings', icon: Settings },
+    (isStaff || isAdmin) && { name: 'Audit Log', path: '/audit-log', icon: ClipboardList },
     (isStaff || isAdmin) && { name: 'Staff Attendance', path: '/staff-attendance', icon: Clock },
-    { name: 'Student Portal (Under Construction)', path: '#', icon: GraduationCap, underConstruction: true },
-    { name: 'Teacher Portal (Under Construction)', path: '#', icon: Users, underConstruction: true },
+    { name: 'Student Portal (Under Development)', path: '#', icon: GraduationCap, underConstruction: true },
+    { name: 'Teacher Portal (Under Development)', path: '#', icon: Users, underConstruction: true },
   ].filter(Boolean);
+
+  const getBreadcrumbs = () => {
+    const path = location.pathname;
+    
+    // Always start with "Overview"
+    const crumbs = [{ name: 'Overview', path: '/' }];
+    
+    if (path === '/' || path === '') {
+      return crumbs;
+    }
+    
+    // Split and clean segments
+    const segments = path.split('/').filter(Boolean);
+    
+    let currentLink = '';
+    segments.forEach((segment) => {
+      currentLink += `/${segment}`;
+      
+      let name = segment;
+      
+      // Map segments to friendly readable names
+      if (segment === 'staff-management') name = 'Staff Account Management';
+      else if (segment === 'attendance-records') name = 'Attendance Records';
+      else if (segment === 'admin-settings') name = 'Admin Settings';
+      else if (segment === 'audit-log') name = 'Audit Log';
+      else if (segment === 'staff-attendance') name = 'Staff Attendance';
+      else if (segment === 'logs') name = 'Logs';
+      else {
+        // Format names like "august-2026" or "2026-08" to capitalized human-readable form
+        name = segment
+          .split('-')
+          .map(word => {
+            if (word.length === 0) return '';
+            return word.charAt(0).toUpperCase() + word.slice(1);
+          })
+          .join(' ');
+      }
+      
+      crumbs.push({ name, path: currentLink });
+    });
+    
+    return crumbs;
+  };
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--bg-base)', transition: 'background var(--transition-normal)' }}>
@@ -300,6 +343,53 @@ function DashboardLayout() {
           >
             <Menu size={24} />
           </button>
+
+          {/* Breadcrumbs */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginLeft: '12px' }} className="breadcrumbs-container">
+            <style>{`
+              .breadcrumb-link:hover {
+                color: var(--color-primary) !important;
+              }
+            `}</style>
+            {getBreadcrumbs().map((crumb, idx, arr) => {
+              const isLast = idx === arr.length - 1;
+              const validPaths = ['/', '/staff-management', '/attendance-records', '/admin-settings', '/audit-log', '/staff-attendance'];
+              const isClickable = validPaths.includes(crumb.path) && !isLast;
+
+              return (
+                <React.Fragment key={idx}>
+                  {idx > 0 && (
+                    <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem', padding: '0 2px', userSelect: 'none' }}>&gt;</span>
+                  )}
+                  {isClickable ? (
+                    <Link
+                      to={crumb.path}
+                      style={{
+                        color: 'var(--text-secondary)',
+                        textDecoration: 'none',
+                        fontSize: '0.85rem',
+                        fontWeight: 500,
+                        transition: 'color var(--transition-fast)'
+                      }}
+                      className="breadcrumb-link"
+                    >
+                      {crumb.name}
+                    </Link>
+                  ) : (
+                    <span style={{
+                      color: isLast ? 'var(--text-primary)' : 'var(--text-secondary)',
+                      fontWeight: isLast ? 600 : 500,
+                      fontSize: '0.85rem',
+                      fontFamily: isLast ? 'var(--font-display)' : 'inherit',
+                      userSelect: 'none'
+                    }}>
+                      {crumb.name}
+                    </span>
+                  )}
+                </React.Fragment>
+              );
+            })}
+          </div>
 
           <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '20px' }}>
             

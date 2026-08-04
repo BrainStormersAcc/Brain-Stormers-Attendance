@@ -97,7 +97,15 @@ export function AuthProvider({ children }) {
     // 2. Update email in Auth if changed
     const newAuthEmail = username.includes('@') ? username : `${username}@brainstormers.internal`;
     if (newAuthEmail !== user.email) {
-      await updateEmail(user, newAuthEmail);
+      try {
+        await updateEmail(user, newAuthEmail);
+      } catch (emailErr) {
+        console.warn('Email update rejected by Firebase Auth:', emailErr);
+        if (emailErr.code === 'auth/operation-not-allowed') {
+          throw new Error('Username changes are disabled by your Firebase configuration.');
+        }
+        throw emailErr;
+      }
     }
 
     // 3. Update password in Auth if changed

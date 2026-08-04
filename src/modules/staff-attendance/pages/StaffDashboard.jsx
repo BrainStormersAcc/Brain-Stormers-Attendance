@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { 
   Users, 
   Calendar as CalendarIcon, 
@@ -23,6 +24,7 @@ import NeuBadge from '../../../shared/components/NeuBadge.jsx';
 import NeuDatePicker from '../../../shared/components/NeuDatePicker.jsx';
 import NeuInput from '../../../shared/components/NeuInput.jsx';
 import NeuSegmentedControl from '../../../shared/components/NeuSegmentedControl.jsx';
+import NeuTimePicker from '../../../shared/components/NeuTimePicker.jsx';
 import { useAuth } from '../../../contexts/AuthContext.jsx';
 import Loader from '../../../shared/components/Loader.jsx';
 import { db } from '../../../config/firebase.js';
@@ -85,6 +87,7 @@ export default function StaffDashboard() {
   const manualStaffDropdownRef = useRef(null);
 
   // Summary sort states (Admin Only)
+  const [summaryViewScope, setSummaryViewScope] = useState('Monthly'); // 'Monthly' | 'Yearly' | 'Both'
   const [summarySortField, setSummarySortField] = useState('pct');
   const [summarySortOrder, setSummarySortOrder] = useState('desc');
 
@@ -196,7 +199,7 @@ export default function StaffDashboard() {
     setDataLoading(true);
     setDataError('');
     try {
-      if (userProfile.role === 'admin') {
+      if (userProfile.role === 'admin' || userProfile.role === 'staff') {
         // 1. Fetch active staff list
         const staffList = await getAllStaff();
         const activeStaff = staffList.filter(s => s.active);
@@ -561,9 +564,8 @@ export default function StaffDashboard() {
   }
 
   const isAdmin = userProfile.role === 'admin';
-  const dataScopeLabel = isAdmin 
-    ? 'All Staff Attendance Data (Admin Scope)' 
-    : 'Personal Attendance Data (Staff Scope)';
+  const isStaff = userProfile.role === 'staff';
+  const dataScopeLabel = 'All Staff Attendance Data';
 
   // View mode setter with persistence
   const handleViewModeChange = (newMode) => {
@@ -600,8 +602,8 @@ export default function StaffDashboard() {
       result = result.filter(log => log.date <= filterTo);
     }
 
-    // 2. Selected Staff Member Filter (Admin Only)
-    if (isAdmin && selectedStaff) {
+    // 2. Selected Staff Member Filter
+    if ((isAdmin || isStaff) && selectedStaff) {
       result = result.filter(log => log.userId === selectedStaff.uid);
     }
 
@@ -624,7 +626,7 @@ export default function StaffDashboard() {
     const isDefaultRange = filterFrom === getFirstDayOfCurrentMonth() && filterTo === getLastDayOfCurrentMonth();
     const workingDaysCount = getWorkingDaysInRange(filterFrom, filterTo);
 
-    if (isAdmin) {
+    if (isAdmin || isStaff) {
       // If a staff is selected, total staff count in current context is 1, else total active staff count
       const totalStaffCount = selectedStaff ? 1 : rawStaffList.length;
       
@@ -800,17 +802,14 @@ export default function StaffDashboard() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '24px' }}>
         {[1, 2, 3, 4].map(i => (
           <NeuCard key={i} variant="raised" style={{ padding: '24px', display: 'flex', gap: '20px', alignItems: 'center' }}>
-            <div style={{
+            <div className="shimmer-block" style={{
               width: '54px',
               height: '54px',
               borderRadius: 'var(--border-radius-md)',
-              backgroundColor: 'var(--bg-surface-elevated)',
-              boxShadow: 'var(--neu-shadow-pressed-sm)',
-              animation: 'pulse 1.5s infinite ease-in-out'
             }} />
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <div style={{ height: '14px', width: '65%', backgroundColor: 'var(--bg-surface-elevated)', borderRadius: '4px', animation: 'pulse 1.5s infinite ease-in-out' }} />
-              <div style={{ height: '24px', width: '35%', backgroundColor: 'var(--bg-surface-elevated)', borderRadius: '4px', animation: 'pulse 1.5s infinite ease-in-out' }} />
+              <div className="shimmer-block" style={{ height: '14px', width: '65%', borderRadius: '4px' }} />
+              <div className="shimmer-block" style={{ height: '24px', width: '35%', borderRadius: '4px' }} />
             </div>
           </NeuCard>
         ))}
@@ -824,11 +823,9 @@ export default function StaffDashboard() {
       <tr key={rowIndex}>
         {Array.from({ length: colsCount }).map((_, colIndex) => (
           <td key={colIndex} style={{ padding: '16px 20px' }}>
-            <div style={{
+            <div className="shimmer-block" style={{
               height: '16px',
-              backgroundColor: 'var(--bg-surface-elevated)',
               borderRadius: '4px',
-              animation: 'pulse 1.5s infinite ease-in-out',
               width: colIndex === 0 ? '70%' : '50%'
             }} />
           </td>
@@ -842,13 +839,12 @@ export default function StaffDashboard() {
     return Array.from({ length: 4 }).map((_, idx) => (
       <NeuCard key={idx} variant="raised" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div style={{ height: '14px', width: '30%', backgroundColor: 'var(--bg-surface-elevated)', borderRadius: '4px', animation: 'pulse 1.5s infinite ease-in-out' }} />
-          <div style={{ height: '24px', width: '20%', backgroundColor: 'var(--bg-surface-elevated)', borderRadius: '12px', animation: 'pulse 1.5s infinite ease-in-out' }} />
+          <div className="shimmer-block" style={{ height: '14px', width: '30%', borderRadius: '4px' }} />
+          <div className="shimmer-block" style={{ height: '24px', width: '20%', borderRadius: '12px' }} />
         </div>
         <div style={{ height: '1px', backgroundColor: 'var(--border-color)' }} />
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-          <div style={{ height: '32px', backgroundColor: 'var(--bg-surface-elevated)', borderRadius: '4px', animation: 'pulse 1.5s infinite ease-in-out' }} />
-          <div style={{ height: '32px', backgroundColor: 'var(--bg-surface-elevated)', borderRadius: '4px', animation: 'pulse 1.5s infinite ease-in-out' }} />
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '12px' }}>
+          <div className="shimmer-block" style={{ height: '32px', borderRadius: '4px' }} />
         </div>
       </NeuCard>
     ));
@@ -861,7 +857,7 @@ export default function StaffDashboard() {
     }
     return (
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '24px' }}>
-        {isAdmin ? (
+        {(isAdmin || isStaff) ? (
           <>
             {/* Card 1: Present Today */}
             <NeuCard variant="raised" style={{ padding: '24px', display: 'flex', gap: '20px', alignItems: 'center' }}>
@@ -1082,8 +1078,8 @@ export default function StaffDashboard() {
             onChange={(val) => setFilterTo(val)}
           />
 
-          {/* Filter by Staff member (Admin only) */}
-          {isAdmin && (
+          {/* Filter by Staff member */}
+          {(isAdmin || isStaff) && (
             <div ref={dropdownRef} style={{ position: 'relative', display: 'flex', flexDirection: 'column', gap: '6px', width: '100%' }}>
               <label className="neu-input-label">Filter by Staff Member</label>
               <div style={{ position: 'relative', width: '100%' }}>
@@ -1440,17 +1436,16 @@ export default function StaffDashboard() {
               <table className="neu-table">
                 <thead>
                   <tr>
-                    {isAdmin && <th>Staff Name</th>}
+                    {(isAdmin || isStaff) && <th>Staff Name</th>}
                     <th>Date</th>
                     <th>Check-In</th>
-                    <th>Check-Out</th>
                     <th>Status</th>
-                    {isAdmin && <th>Marked By</th>}
+                    {(isAdmin || isStaff) && <th>Marked By</th>}
                     {isAdmin && <th style={{ textAlign: 'center' }}>Actions</th>}
                   </tr>
                 </thead>
                 <tbody>
-                  {renderTableSkeleton(isAdmin ? 7 : 4)}
+                  {renderTableSkeleton(isAdmin ? 6 : 5)}
                 </tbody>
               </table>
             </div>
@@ -1467,19 +1462,18 @@ export default function StaffDashboard() {
               <table className="neu-table">
                 <thead>
                   <tr>
-                    {isAdmin && <th>Staff Name</th>}
+                    {(isAdmin || isStaff) && <th>Staff Name</th>}
                     <th>Date</th>
                     <th>Check-In</th>
-                    <th>Check-Out</th>
                     <th>Status</th>
-                    {isAdmin && <th>Marked By</th>}
+                    {(isAdmin || isStaff) && <th>Marked By</th>}
                     {isAdmin && <th style={{ textAlign: 'center' }}>Actions</th>}
                   </tr>
                 </thead>
                 <tbody>
                   {currentLogs.map((log) => (
                     <tr key={log.id || `${log.userId}_${log.date}`}>
-                      {isAdmin && (
+                      {(isAdmin || isStaff) && (
                         <td style={{ fontWeight: 600 }}>
                           {staffNameMap[log.userId] || 'Unknown User'}
                         </td>
@@ -1488,11 +1482,10 @@ export default function StaffDashboard() {
                         {formatDateLabel(log.date)}
                       </td>
                       <td>{formatTime(log.checkIn)}</td>
-                      <td>{formatTime(log.checkOut)}</td>
                       <td>
                         <NeuBadge variant={log.status}>{log.status}</NeuBadge>
                       </td>
-                      {isAdmin && (
+                      {(isAdmin || isStaff) && (
                         <td style={{ textTransform: 'capitalize', color: 'var(--text-secondary)' }}>
                           <span>{log.markedBy || 'manual'}</span>
                           {log.lastEditedBy && (
@@ -1604,7 +1597,7 @@ export default function StaffDashboard() {
                     </span>
                     <NeuBadge variant={log.status}>{log.status}</NeuBadge>
                   </div>
-                  {isAdmin && (
+                   {(isAdmin || isStaff) && (
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.9rem', borderTop: '1px solid var(--border-color)', paddingTop: '10px' }}>
                       <span style={{ color: 'var(--text-secondary)' }}>Staff Name:</span>
                       <span style={{ fontWeight: 600 }}>{staffNameMap[log.userId] || 'Unknown User'}</span>
@@ -1612,19 +1605,15 @@ export default function StaffDashboard() {
                   )}
                   <div style={{ 
                     display: 'grid', 
-                    gridTemplateColumns: '1fr 1fr', 
+                    gridTemplateColumns: '1fr', 
                     gap: '12px', 
                     fontSize: '0.85rem', 
-                    borderTop: isAdmin ? 'none' : '1px solid var(--border-color)', 
-                    paddingTop: isAdmin ? '0' : '10px' 
+                    borderTop: (isAdmin || isStaff) ? 'none' : '1px solid var(--border-color)', 
+                    paddingTop: (isAdmin || isStaff) ? '0' : '10px' 
                   }}>
                     <div>
                       <span style={{ display: 'block', color: 'var(--text-secondary)', marginBottom: '2px' }}>Check-In</span>
                       <span style={{ fontWeight: 600 }}>{formatTime(log.checkIn)}</span>
-                    </div>
-                    <div>
-                      <span style={{ display: 'block', color: 'var(--text-secondary)', marginBottom: '2px' }}>Check-Out</span>
-                      <span style={{ fontWeight: 600 }}>{formatTime(log.checkOut)}</span>
                     </div>
                   </div>
                   {isAdmin && (
@@ -1912,8 +1901,8 @@ export default function StaffDashboard() {
     }
 
     const headers = isAdmin
-      ? ['Staff Name', 'Date', 'Check-In', 'Check-Out', 'Status', 'Marked By']
-      : ['Date', 'Check-In', 'Check-Out', 'Status'];
+      ? ['Staff Name', 'Date', 'Check-In', 'Status', 'Marked By']
+      : ['Date', 'Check-In', 'Status'];
 
     const csvRows = [];
     csvRows.push(headers.join(','));
@@ -1925,7 +1914,6 @@ export default function StaffDashboard() {
       }
       row.push(`"${formatDateLabel(log.date)}"`);
       row.push(`"${formatTime(log.checkIn)}"`);
-      row.push(`"${formatTime(log.checkOut)}"`);
       row.push(`"${log.status}"`);
       if (isAdmin) {
         row.push(`"${log.markedBy || 'manual'}"`);
@@ -2011,7 +1999,6 @@ export default function StaffDashboard() {
                 ${isAdmin ? '<th>Staff Name</th>' : ''}
                 <th>Date</th>
                 <th>Check-In</th>
-                <th>Check-Out</th>
                 <th>Status</th>
                 ${isAdmin ? '<th>Marked By</th>' : ''}
               </tr>
@@ -2022,7 +2009,6 @@ export default function StaffDashboard() {
                   ${isAdmin ? `<td>${staffNameMap[log.userId] || 'Unknown User'}</td>` : ''}
                   <td>${formatDateLabel(log.date)}</td>
                   <td>${formatTime(log.checkIn)}</td>
-                  <td>${formatTime(log.checkOut)}</td>
                   <td><span class="status-badge">${log.status}</span></td>
                   ${isAdmin ? `<td>${log.markedBy || 'manual'}</td>` : ''}
                 </tr>
@@ -2081,39 +2067,94 @@ export default function StaffDashboard() {
     return count;
   };
 
-  // Calculate monthly summary metrics for active staff roster (Admin Only)
+  // Get working days in the year (Admin Only)
+  const getWorkingDaysForYear = (year) => {
+    const today = new Date();
+    const isCurrentYear = year === today.getFullYear();
+    
+    const endDay = isCurrentYear ? today : new Date(year, 11, 31);
+    const startDay = new Date(year, 0, 1);
+    
+    let count = 0;
+    let current = new Date(startDay.getTime());
+    while (current <= endDay) {
+      if (current.getDay() !== 5) { // non-Friday
+        count++;
+      }
+      current.setDate(current.getDate() + 1);
+    }
+    return count;
+  };
+
+  // Calculate monthly/yearly summary metrics for active staff roster
   const getMonthlySummaryRoster = () => {
-    if (!isAdmin) return [];
+    if (!(isAdmin || isStaff)) return [];
     
     const scope = getSelectedMonthScope();
-    const workingDays = getWorkingDaysForMonth(scope.year, scope.month);
-    const prefix = `${scope.year}-${String(scope.month + 1).padStart(2, '0')}`;
+    const mWorkingDays = getWorkingDaysForMonth(scope.year, scope.month);
+    const yWorkingDays = getWorkingDaysForYear(scope.year);
+    
+    const mPrefix = `${scope.year}-${String(scope.month + 1).padStart(2, '0')}`;
+    const yPrefix = `${scope.year}`;
 
     const roster = rawStaffList.map(staff => {
-      const staffLogs = rawLogs.filter(log => 
+      // Monthly Logs
+      const mLogs = rawLogs.filter(log => 
         log.userId === staff.uid && 
-        log.date.startsWith(prefix)
+        log.date.startsWith(mPrefix)
       );
 
-      const presentCount = staffLogs.filter(log => log.status === 'present' || log.status === 'late').length;
-      const lateCount = staffLogs.filter(log => log.status === 'late').length;
-      const absentCount = Math.max(0, workingDays - presentCount);
-      const pct = workingDays > 0 ? Math.round((presentCount / workingDays) * 100) : 0;
+      // Yearly Logs
+      const yLogs = rawLogs.filter(log => 
+        log.userId === staff.uid && 
+        log.date.startsWith(yPrefix)
+      );
+
+      const mPresent = mLogs.filter(log => log.status === 'present' || log.status === 'late').length;
+      const mLate = mLogs.filter(log => log.status === 'late').length;
+      const mAbsent = Math.max(0, mWorkingDays - mPresent);
+      const mPct = mWorkingDays > 0 ? Math.round((mPresent / mWorkingDays) * 100) : 0;
+
+      const yPresent = yLogs.filter(log => log.status === 'present' || log.status === 'late').length;
+      const yLate = yLogs.filter(log => log.status === 'late').length;
+      const yAbsent = Math.max(0, yWorkingDays - yPresent);
+      const yPct = yWorkingDays > 0 ? Math.round((yPresent / yWorkingDays) * 100) : 0;
 
       return {
         uid: staff.uid,
         name: staff.name,
         username: staff.username,
-        present: presentCount,
-        absent: absentCount,
-        late: lateCount,
-        pct: pct
+        // Monthly Metrics
+        mPresent,
+        mAbsent,
+        mLate,
+        mPct,
+        // Yearly Metrics
+        yPresent,
+        yAbsent,
+        yLate,
+        yPct,
+        // Legacy fallback properties for sorting
+        present: summaryViewScope === 'Yearly' ? yPresent : mPresent,
+        absent: summaryViewScope === 'Yearly' ? yAbsent : mAbsent,
+        late: summaryViewScope === 'Yearly' ? yLate : mLate,
+        pct: summaryViewScope === 'Yearly' ? yPct : mPct
       };
     });
 
     roster.sort((a, b) => {
-      let valA = a[summarySortField];
-      let valB = b[summarySortField];
+      let field = summarySortField;
+      
+      // Fallback mappings if sorting field is legacy and we are in Both mode
+      if (summaryViewScope === 'Both') {
+        if (field === 'pct') field = 'mPct';
+        if (field === 'present') field = 'mPresent';
+        if (field === 'absent') field = 'mAbsent';
+        if (field === 'late') field = 'mLate';
+      }
+
+      let valA = a[field] !== undefined ? a[field] : a['pct'];
+      let valB = b[field] !== undefined ? b[field] : b['pct'];
       
       if (typeof valA === 'string') {
         valA = valA.toLowerCase();
@@ -2146,14 +2187,14 @@ export default function StaffDashboard() {
 
   // SUB-RENDER: Monthly summary table card
   const renderMonthlySummaryTable = () => {
-    if (!isAdmin) return null;
+    if (!(isAdmin || isStaff)) return null;
     if (statsLoading) {
       return (
         <NeuCard variant="raised" style={{ padding: '36px', display: 'flex', flexDirection: 'column', gap: '24px', marginTop: '16px' }}>
-          <div style={{ height: '24px', width: '40%', backgroundColor: 'var(--bg-surface-elevated)', borderRadius: '4px', animation: 'pulse 1.5s infinite ease-in-out' }} />
+          <div className="shimmer-block" style={{ height: '24px', width: '40%', borderRadius: '4px' }} />
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             {Array.from({ length: 5 }).map((_, i) => (
-              <div key={i} style={{ height: '20px', backgroundColor: 'var(--bg-surface-elevated)', borderRadius: '4px', animation: 'pulse 1.5s infinite ease-in-out' }} />
+              <div key={i} className="shimmer-block" style={{ height: '20px', borderRadius: '4px' }} />
             ))}
           </div>
         </NeuCard>
@@ -2165,13 +2206,22 @@ export default function StaffDashboard() {
 
     return (
       <NeuCard variant="raised" style={{ padding: '36px', display: 'flex', flexDirection: 'column', gap: '24px', marginTop: '16px' }}>
-        <div>
-          <h3 style={{ fontSize: '1.5rem', fontFamily: 'var(--font-display)', marginBottom: '4px' }}>
-            Monthly Attendance Summary ({scope.label})
-          </h3>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
-            Click table headers to sort staff by attendance metrics.
-          </p>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
+          <div>
+            <h3 style={{ fontSize: '1.5rem', fontFamily: 'var(--font-display)', marginBottom: '4px' }}>
+              {summaryViewScope === 'Monthly' && `Monthly Attendance Summary (${scope.label})`}
+              {summaryViewScope === 'Yearly' && `Yearly Attendance Summary (${scope.year})`}
+              {summaryViewScope === 'Both' && `Year-to-Date Attendance Summary (${scope.year})`}
+            </h3>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
+              Click table headers to sort staff by attendance metrics.
+            </p>
+          </div>
+          <NeuSegmentedControl
+            options={['Monthly', 'Yearly', 'Both']}
+            selectedValue={summaryViewScope}
+            onChange={setSummaryViewScope}
+          />
         </div>
 
         {roster.length === 0 ? (
@@ -2182,78 +2232,191 @@ export default function StaffDashboard() {
           <>
             {/* Desktop View Table */}
             <div className="desktop-table-container">
-              <table className="neu-table">
-                <thead>
-                  <tr>
-                    <th style={{ cursor: 'pointer' }} onClick={() => handleSortSummary('name')}>
-                      Staff Member{renderSortArrow('name')}
-                    </th>
-                    <th style={{ cursor: 'pointer', textAlign: 'center' }} onClick={() => handleSortSummary('present')}>
-                      Present Days{renderSortArrow('present')}
-                    </th>
-                    <th style={{ cursor: 'pointer', textAlign: 'center' }} onClick={() => handleSortSummary('absent')}>
-                      Absent Days{renderSortArrow('absent')}
-                    </th>
-                    <th style={{ cursor: 'pointer', textAlign: 'center' }} onClick={() => handleSortSummary('late')}>
-                      Late Days{renderSortArrow('late')}
-                    </th>
-                    <th style={{ cursor: 'pointer', textAlign: 'center' }} onClick={() => handleSortSummary('pct')}>
-                      Attendance %{renderSortArrow('pct')}
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {roster.map(row => (
-                    <tr key={row.uid}>
-                      <td style={{ fontWeight: 600 }}>
-                        {row.name} <span style={{ fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-secondary)' }}>@{row.username}</span>
-                      </td>
-                      <td style={{ textAlign: 'center', fontWeight: 500 }}>{row.present}</td>
-                      <td style={{ textAlign: 'center', fontWeight: 500 }}>{row.absent}</td>
-                      <td style={{ textAlign: 'center', fontWeight: 500 }}>{row.late}</td>
-                      <td style={{ textAlign: 'center' }}>
-                        <span style={{
-                          fontWeight: 700,
-                          color: row.pct >= 90 ? 'var(--color-success)' : row.pct >= 75 ? 'var(--color-warning)' : 'var(--color-danger)'
-                        }}>
-                          {row.pct}%
-                        </span>
-                      </td>
+              {summaryViewScope !== 'Both' ? (
+                <table className="neu-table">
+                  <thead>
+                    <tr>
+                      <th style={{ cursor: 'pointer' }} onClick={() => handleSortSummary('name')}>
+                        Staff Member{renderSortArrow('name')}
+                      </th>
+                      <th style={{ cursor: 'pointer', textAlign: 'center' }} onClick={() => handleSortSummary(summaryViewScope === 'Yearly' ? 'yPresent' : 'present')}>
+                        Present Days{renderSortArrow(summaryViewScope === 'Yearly' ? 'yPresent' : 'present')}
+                      </th>
+                      <th style={{ cursor: 'pointer', textAlign: 'center' }} onClick={() => handleSortSummary(summaryViewScope === 'Yearly' ? 'yAbsent' : 'absent')}>
+                        Absent Days{renderSortArrow(summaryViewScope === 'Yearly' ? 'yAbsent' : 'absent')}
+                      </th>
+                      <th style={{ cursor: 'pointer', textAlign: 'center' }} onClick={() => handleSortSummary(summaryViewScope === 'Yearly' ? 'yLate' : 'late')}>
+                        Late Days{renderSortArrow(summaryViewScope === 'Yearly' ? 'yLate' : 'late')}
+                      </th>
+                      <th style={{ cursor: 'pointer', textAlign: 'center' }} onClick={() => handleSortSummary(summaryViewScope === 'Yearly' ? 'yPct' : 'pct')}>
+                        Attendance %{renderSortArrow(summaryViewScope === 'Yearly' ? 'yPct' : 'pct')}
+                      </th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {roster.map(row => {
+                      const pct = summaryViewScope === 'Yearly' ? row.yPct : row.mPct;
+                      const present = summaryViewScope === 'Yearly' ? row.yPresent : row.mPresent;
+                      const absent = summaryViewScope === 'Yearly' ? row.yAbsent : row.mAbsent;
+                      const late = summaryViewScope === 'Yearly' ? row.yLate : row.mLate;
+                      return (
+                        <tr key={row.uid}>
+                          <td style={{ fontWeight: 600 }}>
+                            {row.name} <span style={{ fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-secondary)' }}>@{row.username}</span>
+                          </td>
+                          <td style={{ textAlign: 'center', fontWeight: 500 }}>{present}</td>
+                          <td style={{ textAlign: 'center', fontWeight: 500 }}>{absent}</td>
+                          <td style={{ textAlign: 'center', fontWeight: 500 }}>{late}</td>
+                          <td style={{ textAlign: 'center' }}>
+                            <span style={{
+                              fontWeight: 700,
+                              color: pct >= 90 ? 'var(--color-success)' : pct >= 75 ? 'var(--color-warning)' : 'var(--color-danger)'
+                            }}>
+                              {pct}%
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              ) : (
+                <table className="neu-table" style={{ borderSpacing: '0 8px' }}>
+                  <thead>
+                    <tr>
+                      <th rowSpan={2} style={{ cursor: 'pointer', verticalAlign: 'middle' }} onClick={() => handleSortSummary('name')}>
+                        Staff Member{renderSortArrow('name')}
+                      </th>
+                      <th colSpan={4} style={{ textAlign: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: '6px', fontWeight: 600 }}>
+                        Monthly Summary ({scope.label})
+                      </th>
+                      <th colSpan={4} style={{ textAlign: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: '6px', fontWeight: 600 }}>
+                        Yearly Summary ({scope.year})
+                      </th>
+                    </tr>
+                    <tr>
+                      <th style={{ cursor: 'pointer', textAlign: 'center', fontSize: '0.75rem', padding: '8px' }} onClick={() => handleSortSummary('mPresent')}>
+                        P{renderSortArrow('mPresent')}
+                      </th>
+                      <th style={{ cursor: 'pointer', textAlign: 'center', fontSize: '0.75rem', padding: '8px' }} onClick={() => handleSortSummary('mAbsent')}>
+                        A{renderSortArrow('mAbsent')}
+                      </th>
+                      <th style={{ cursor: 'pointer', textAlign: 'center', fontSize: '0.75rem', padding: '8px' }} onClick={() => handleSortSummary('mLate')}>
+                        L{renderSortArrow('mLate')}
+                      </th>
+                      <th style={{ cursor: 'pointer', textAlign: 'center', fontSize: '0.75rem', padding: '8px' }} onClick={() => handleSortSummary('mPct')}>
+                        %{renderSortArrow('mPct')}
+                      </th>
+                      <th style={{ cursor: 'pointer', textAlign: 'center', fontSize: '0.75rem', padding: '8px' }} onClick={() => handleSortSummary('yPresent')}>
+                        P{renderSortArrow('yPresent')}
+                      </th>
+                      <th style={{ cursor: 'pointer', textAlign: 'center', fontSize: '0.75rem', padding: '8px' }} onClick={() => handleSortSummary('yAbsent')}>
+                        A{renderSortArrow('yAbsent')}
+                      </th>
+                      <th style={{ cursor: 'pointer', textAlign: 'center', fontSize: '0.75rem', padding: '8px' }} onClick={() => handleSortSummary('yLate')}>
+                        L{renderSortArrow('yLate')}
+                      </th>
+                      <th style={{ cursor: 'pointer', textAlign: 'center', fontSize: '0.75rem', padding: '8px' }} onClick={() => handleSortSummary('yPct')}>
+                        %{renderSortArrow('yPct')}
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {roster.map(row => (
+                      <tr key={row.uid}>
+                        <td style={{ fontWeight: 600 }}>
+                          {row.name} <span style={{ fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-secondary)' }}>@{row.username}</span>
+                        </td>
+                        {/* Monthly cols */}
+                        <td style={{ textAlign: 'center', padding: '12px 8px' }}>{row.mPresent}</td>
+                        <td style={{ textAlign: 'center', padding: '12px 8px' }}>{row.mAbsent}</td>
+                        <td style={{ textAlign: 'center', padding: '12px 8px' }}>{row.mLate}</td>
+                        <td style={{ textAlign: 'center', padding: '12px 8px' }}>
+                          <span style={{
+                            fontWeight: 700,
+                            color: row.mPct >= 90 ? 'var(--color-success)' : row.mPct >= 75 ? 'var(--color-warning)' : 'var(--color-danger)'
+                          }}>
+                            {row.mPct}%
+                          </span>
+                        </td>
+                        {/* Yearly cols */}
+                        <td style={{ textAlign: 'center', padding: '12px 8px', borderLeft: '1px dotted var(--border-color)' }}>{row.yPresent}</td>
+                        <td style={{ textAlign: 'center', padding: '12px 8px' }}>{row.yAbsent}</td>
+                        <td style={{ textAlign: 'center', padding: '12px 8px' }}>{row.yLate}</td>
+                        <td style={{ textAlign: 'center', padding: '12px 8px' }}>
+                          <span style={{
+                            fontWeight: 700,
+                            color: row.yPct >= 90 ? 'var(--color-success)' : row.yPct >= 75 ? 'var(--color-warning)' : 'var(--color-danger)'
+                          }}>
+                            {row.yPct}%
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
             </div>
 
             {/* Mobile View Stacked Cards */}
             <div className="mobile-cards-container">
-              {roster.map(row => (
-                <NeuCard key={row.uid} variant="raised" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontWeight: 600 }}>{row.name}</span>
-                    <span style={{
-                      fontWeight: 700,
-                      color: row.pct >= 90 ? 'var(--color-success)' : row.pct >= 75 ? 'var(--color-warning)' : 'var(--color-danger)'
-                    }}>
-                      {row.pct}%
-                    </span>
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', fontSize: '0.8rem', textAlign: 'center', borderTop: '1px solid var(--border-color)', paddingTop: '10px' }}>
-                    <div>
-                      <span style={{ display: 'block', color: 'var(--text-secondary)', marginBottom: '2px' }}>Present</span>
-                      <span style={{ fontWeight: 600 }}>{row.present}</span>
+              {roster.map(row => {
+                const pct = summaryViewScope === 'Yearly' ? row.yPct : row.mPct;
+                return (
+                  <NeuCard key={row.uid} variant="raised" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div>
+                        <span style={{ fontWeight: 600, display: 'block' }}>{row.name}</span>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>@{row.username}</span>
+                      </div>
+                      {summaryViewScope !== 'Both' && (
+                        <span style={{
+                          fontWeight: 700,
+                          color: pct >= 90 ? 'var(--color-success)' : pct >= 75 ? 'var(--color-warning)' : 'var(--color-danger)'
+                        }}>
+                          {pct}%
+                        </span>
+                      )}
                     </div>
-                    <div>
-                      <span style={{ display: 'block', color: 'var(--text-secondary)', marginBottom: '2px' }}>Absent</span>
-                      <span style={{ fontWeight: 600 }}>{row.absent}</span>
-                    </div>
-                    <div>
-                      <span style={{ display: 'block', color: 'var(--text-secondary)', marginBottom: '2px' }}>Late</span>
-                      <span style={{ fontWeight: 600 }}>{row.late}</span>
-                    </div>
-                  </div>
-                </NeuCard>
-              ))}
+                    <div style={{ height: '1px', backgroundColor: 'var(--border-color)' }} />
+                    
+                    {summaryViewScope === 'Both' ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                        <div>
+                          <span style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px' }}>Monthly ({scope.label})</span>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem' }}>
+                            <span>P: <strong>{row.mPresent}</strong> | A: <strong>{row.mAbsent}</strong> | L: <strong>{row.mLate}</strong></span>
+                            <span style={{ fontWeight: 700, color: row.mPct >= 90 ? 'var(--color-success)' : row.mPct >= 75 ? 'var(--color-warning)' : 'var(--color-danger)' }}>{row.mPct}%</span>
+                          </div>
+                        </div>
+                        <div style={{ height: '1px', borderTop: '1px dotted var(--border-color)' }} />
+                        <div>
+                          <span style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px' }}>Yearly ({scope.year})</span>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem' }}>
+                            <span>P: <strong>{row.yPresent}</strong> | A: <strong>{row.yAbsent}</strong> | L: <strong>{row.yLate}</strong></span>
+                            <span style={{ fontWeight: 700, color: row.yPct >= 90 ? 'var(--color-success)' : row.yPct >= 75 ? 'var(--color-warning)' : 'var(--color-danger)' }}>{row.yPct}%</span>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', fontSize: '0.8rem', textAlign: 'center' }}>
+                        <div>
+                          <span style={{ display: 'block', color: 'var(--text-secondary)', marginBottom: '2px' }}>Present</span>
+                          <span style={{ fontWeight: 600 }}>{summaryViewScope === 'Yearly' ? row.yPresent : row.mPresent}</span>
+                        </div>
+                        <div>
+                          <span style={{ display: 'block', color: 'var(--text-secondary)', marginBottom: '2px' }}>Absent</span>
+                          <span style={{ fontWeight: 600 }}>{summaryViewScope === 'Yearly' ? row.yAbsent : row.mAbsent}</span>
+                        </div>
+                        <div>
+                          <span style={{ display: 'block', color: 'var(--text-secondary)', marginBottom: '2px' }}>Late</span>
+                          <span style={{ fontWeight: 600 }}>{summaryViewScope === 'Yearly' ? row.yLate : row.mLate}</span>
+                        </div>
+                      </div>
+                    )}
+                  </NeuCard>
+                );
+              })}
             </div>
           </>
         )}
@@ -2266,10 +2429,25 @@ export default function StaffDashboard() {
       
       {/* Custom Stylesheet adding pulse animations and Separated Neumorphic Table rows */}
       <style>{`
-        @keyframes pulse {
-          0% { opacity: 0.65; }
-          50% { opacity: 1; }
-          100% { opacity: 0.65; }
+        @keyframes shimmer-sweep {
+          0% {
+            background-position: -200% 0;
+          }
+          100% {
+            background-position: 200% 0;
+          }
+        }
+
+        .shimmer-block {
+          background: linear-gradient(
+            90deg,
+            var(--bg-surface-elevated) 25%,
+            rgba(99, 102, 241, 0.05) 50%,
+            var(--bg-surface-elevated) 75%
+          );
+          background-size: 200% 100%;
+          animation: shimmer-sweep 1.8s infinite linear;
+          box-shadow: inset -1px -1px 3px var(--color-shadow-light), inset 1px 1px 3px var(--color-shadow-dark);
         }
 
         .neu-table {
@@ -2386,8 +2564,8 @@ export default function StaffDashboard() {
             onChange={handleViewModeChange}
           />
 
-          {/* Admin-only Actions Container - Conditional Rendering */}
-          {isAdmin && (
+          {/* Actions Container - Visible to Admin and Staff */}
+          {(isAdmin || isStaff) && (
             <div style={{ display: 'flex', gap: '12px' }}>
               <NeuButton 
                 onClick={handleOpenManualRecordModal}
@@ -2512,7 +2690,7 @@ export default function StaffDashboard() {
             {/* Modal Header */}
             <div>
               <h3 style={{ fontSize: '1.5rem', fontFamily: 'var(--font-display)', marginBottom: '4px' }}>
-                {isAdmin ? 'Staff Attendance Details' : 'My Attendance Details'}
+                {(isAdmin || isStaff) ? 'Staff Attendance Details' : 'My Attendance Details'}
               </h3>
               <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
                 Date: {formatDateLabel(selectedCalendarDay)}
@@ -2521,7 +2699,7 @@ export default function StaffDashboard() {
 
             {/* Modal Body scrollable list */}
             <div style={{ maxHeight: '320px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '12px', paddingRight: '4px' }}>
-              {isAdmin ? (
+              {(isAdmin || isStaff) ? (
                 rawStaffList.map(staff => {
                   const staffLog = rawLogs.find(l => l.date === selectedCalendarDay && l.userId === staff.uid);
                   return (
@@ -2550,7 +2728,7 @@ export default function StaffDashboard() {
                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
                           <NeuBadge variant={staffLog.status}>{staffLog.status}</NeuBadge>
                           <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                            {formatTime(staffLog.checkIn)} - {formatTime(staffLog.checkOut)}
+                            Entry: {formatTime(staffLog.checkIn)}
                           </span>
                         </div>
                       ) : (
@@ -2577,17 +2755,11 @@ export default function StaffDashboard() {
                           <span style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.95rem' }}>Status</span>
                           <NeuBadge variant={myLog.status}>{myLog.status}</NeuBadge>
                         </div>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '16px' }}>
                           <NeuCard variant="inset" style={{ padding: '12px', textAlign: 'center' }}>
                             <span style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Check-In Time</span>
                             <span style={{ fontWeight: 700, fontSize: '1rem', color: 'var(--color-primary)' }}>
                               {formatTime(myLog.checkIn)}
-                            </span>
-                          </NeuCard>
-                          <NeuCard variant="inset" style={{ padding: '12px', textAlign: 'center' }}>
-                            <span style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Check-Out Time</span>
-                            <span style={{ fontWeight: 700, fontSize: '1rem', color: 'var(--color-primary)' }}>
-                              {formatTime(myLog.checkOut)}
                             </span>
                           </NeuCard>
                         </div>
@@ -2614,41 +2786,56 @@ export default function StaffDashboard() {
         </div>
       )}
 
-      {/* Manual Record Adjustment Form Modal */}
-      {isManualRecordModalOpen && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: 'rgba(0, 0, 0, 0.6)',
-          backdropFilter: 'blur(8px)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 1000,
-          padding: '20px'
-        }}>
+      {/* Manual Record Adjustment Form Modal (Sliding Right-Side Drawer) */}
+      {isManualRecordModalOpen && createPortal(
+        <div 
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(15, 23, 42, 0.3)',
+            backdropFilter: 'blur(10px)',
+            display: 'flex',
+            justifyContent: 'flex-end',
+            alignItems: 'stretch',
+            zIndex: 1100,
+            animation: 'fadeIn 0.25s ease-out forwards'
+          }}
+        >
+          {/* Embedded animations for drawer entry */}
+          <style>{`
+            @keyframes slideInFromRight {
+              from { transform: translateX(100%); }
+              to { transform: translateX(0); }
+            }
+          `}</style>
+
           {manualSuccess ? (
-            <NeuCard
-              variant="raised"
+            <div
+              onClick={(e) => e.stopPropagation()}
               style={{
                 width: '100%',
-                maxWidth: '460px',
-                padding: '36px',
+                maxWidth: '480px',
+                backgroundColor: 'var(--bg-base)',
+                borderLeft: '1px solid var(--border-color)',
+                boxShadow: '-10px 0 35px rgba(0, 0, 0, 0.15)',
                 display: 'flex',
                 flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '40px 32px',
+                boxSizing: 'border-box',
                 gap: '24px',
                 textAlign: 'center',
-                alignItems: 'center',
-                animation: 'scaleUpAndGlow 0.5s ease-out forwards'
+                animation: 'slideInFromRight 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards'
               }}
             >
               {/* Success Checkmark Circle */}
               <div style={{
-                width: '80px',
-                height: '80px',
+                width: '88px',
+                height: '88px',
                 borderRadius: '50%',
                 backgroundColor: 'var(--bg-surface-elevated)',
                 boxShadow: 'var(--neu-shadow-pressed-sm)',
@@ -2656,76 +2843,85 @@ export default function StaffDashboard() {
                 alignItems: 'center',
                 justifyContent: 'center',
                 color: 'var(--color-success)',
+                animation: 'scaleUpAndGlow 0.5s ease-out forwards'
               }}>
-                <CheckCircle2 size={48} />
+                <CheckCircle2 size={54} />
               </div>
               <div>
-                <h3 style={{ fontSize: '1.5rem', fontFamily: 'var(--font-display)', marginBottom: '8px' }}>
+                <h3 style={{ fontSize: '1.75rem', fontFamily: 'var(--font-display)', marginBottom: '12px', color: 'var(--text-primary)' }}>
                   Adjustment Saved
                 </h3>
-                <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', lineHeight: '1.5' }}>
-                  The attendance record has been successfully added, and an audit trail log has been created.
+                <p style={{ color: 'var(--text-secondary)', fontSize: '1rem', lineHeight: '1.6', maxWidth: '340px', margin: '0 auto' }}>
+                  The manual attendance record adjustments have been saved, and an audit trail has been logged.
                 </p>
               </div>
-            </NeuCard>
+            </div>
           ) : (
-            <NeuCard
-              variant="raised"
+            <div
+              onClick={(e) => e.stopPropagation()}
               style={{
                 width: '100%',
-                maxWidth: '460px',
-                position: 'relative',
-                padding: '36px',
+                maxWidth: '480px',
+                backgroundColor: 'var(--bg-base)',
+                borderLeft: '1px solid var(--border-color)',
+                boxShadow: '-10px 0 35px rgba(0, 0, 0, 0.15)',
                 display: 'flex',
                 flexDirection: 'column',
-                gap: '24px',
-                textAlign: 'center'
+                padding: '40px 32px',
+                boxSizing: 'border-box',
+                overflowY: 'auto',
+                animation: 'slideInFromRight 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards'
               }}
-              onClick={(e) => e.stopPropagation()}
             >
-              {/* Close Button */}
-              <button 
-                onClick={() => setIsManualRecordModalOpen(false)}
-                disabled={manualSubmitting}
-                style={{
-                  position: 'absolute',
-                  top: '20px',
-                  right: '20px',
-                  background: 'none',
-                  border: 'none',
-                  cursor: 'pointer',
-                  color: 'var(--text-secondary)'
-                }}
-              >
-                <X size={20} />
-              </button>
-
-              {/* Modal Icon Indicator */}
-              <div style={{
-                width: '64px',
-                height: '64px',
-                borderRadius: '50%',
-                backgroundColor: 'var(--bg-surface-elevated)',
-                boxShadow: 'var(--neu-shadow-pressed-sm)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                margin: '0 auto',
-                color: 'var(--color-primary)'
-              }}>
-                {manualModalMode === 'edit' ? <Edit size={28} /> : <Plus size={32} />}
+              {/* Header with Close and Icon */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                <div style={{
+                  width: '54px',
+                  height: '54px',
+                  borderRadius: '50%',
+                  backgroundColor: 'var(--bg-surface-elevated)',
+                  boxShadow: 'var(--neu-shadow-pressed-sm)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: 'var(--color-primary)'
+                }}>
+                  {manualModalMode === 'edit' ? <Edit size={24} /> : <Plus size={26} />}
+                </div>
+                <button 
+                  onClick={() => setIsManualRecordModalOpen(false)}
+                  disabled={manualSubmitting}
+                  style={{
+                    background: 'var(--bg-surface-elevated)',
+                    border: '1px solid var(--border-color)',
+                    borderRadius: '50%',
+                    width: '36px',
+                    height: '36px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: 'pointer',
+                    color: 'var(--text-secondary)',
+                    boxShadow: 'var(--neu-shadow-raised-sm)',
+                    transition: 'transform var(--transition-fast)'
+                  }}
+                  onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
+                  onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                >
+                  <X size={18} />
+                </button>
               </div>
 
-              <div>
-                <h3 style={{ fontSize: '1.5rem', fontFamily: 'var(--font-display)', marginBottom: '4px' }}>
+              <div style={{ marginBottom: '28px', textAlign: 'left' }}>
+                <h3 style={{ fontSize: '1.75rem', fontFamily: 'var(--font-display)', marginBottom: '6px', color: 'var(--text-primary)' }}>
                   {manualModalMode === 'edit' ? 'Edit Manual Record' : 'Add Manual Record'}
                 </h3>
-                <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', lineHeight: '1.5' }}>
                   {manualModalMode === 'edit' ? 'Correct times or status of the existing log.' : 'Override or log manual entry for staff members.'}
                 </p>
               </div>
 
-              <form onSubmit={handleCreateManualRecord} style={{ display: 'flex', flexDirection: 'column', gap: '20px', textAlign: 'left' }}>
+              <form onSubmit={handleCreateManualRecord} style={{ display: 'flex', flexDirection: 'column', gap: '22px', textAlign: 'left', flex: 1 }}>
                 {/* Staff Selector */}
                 {manualModalMode === 'edit' ? (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
@@ -2831,20 +3027,12 @@ export default function StaffDashboard() {
                 />
 
                 {/* Time Pickers */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                  <NeuInput
-                    type="time"
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '16px' }}>
+                  <NeuTimePicker
                     label="Check-In Time *"
                     value={manualCheckIn}
                     onChange={(e) => setManualCheckIn(e.target.value)}
                     required
-                    disabled={manualSubmitting}
-                  />
-                  <NeuInput
-                    type="time"
-                    label="Check-Out Time (Optional)"
-                    value={manualCheckOut}
-                    onChange={(e) => setManualCheckOut(e.target.value)}
                     disabled={manualSubmitting}
                   />
                 </div>
@@ -2927,7 +3115,7 @@ export default function StaffDashboard() {
                 )}
 
                 {/* Form Buttons */}
-                <div style={{ display: 'flex', gap: '16px', marginTop: '12px' }}>
+                <div style={{ display: 'flex', gap: '16px', marginTop: '24px', paddingTop: '12px' }}>
                   <NeuButton
                     type="button"
                     onClick={() => setIsManualRecordModalOpen(false)}
@@ -2946,25 +3134,26 @@ export default function StaffDashboard() {
                   </NeuButton>
                 </div>
               </form>
-            </NeuCard>
+            </div>
           )}
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Soft-Delete Confirmation Modal */}
-      {isDeleteConfirmModalOpen && (
+      {isDeleteConfirmModalOpen && createPortal(
         <div style={{
           position: 'fixed',
           top: 0,
           left: 0,
           right: 0,
           bottom: 0,
-          backgroundColor: 'rgba(0, 0, 0, 0.6)',
-          backdropFilter: 'blur(8px)',
+          backgroundColor: 'rgba(15, 23, 42, 0.3)',
+          backdropFilter: 'blur(10px)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          zIndex: 1000,
+          zIndex: 1100,
           padding: '20px'
         }}>
           {deleteSuccess ? (
@@ -3143,7 +3332,8 @@ export default function StaffDashboard() {
               </form>
             </NeuCard>
           )}
-        </div>
+        </div>,
+        document.body
       )}
 
     </div>
