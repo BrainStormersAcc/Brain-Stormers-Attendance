@@ -16,7 +16,8 @@ import {
   ChevronRight,
   X,
   Edit,
-  Trash2
+  Trash2,
+  Search
 } from 'lucide-react';
 import NeuCard from '../../../shared/components/NeuCard.jsx';
 import NeuButton from '../../../shared/components/NeuButton.jsx';
@@ -25,6 +26,7 @@ import NeuDatePicker from '../../../shared/components/NeuDatePicker.jsx';
 import NeuInput from '../../../shared/components/NeuInput.jsx';
 import NeuSegmentedControl from '../../../shared/components/NeuSegmentedControl.jsx';
 import NeuTimePicker from '../../../shared/components/NeuTimePicker.jsx';
+import NeuToggle from '../../../shared/components/NeuToggle.jsx';
 import { useAuth } from '../../../contexts/AuthContext.jsx';
 import Loader from '../../../shared/components/Loader.jsx';
 import { db } from '../../../config/firebase.js';
@@ -53,6 +55,11 @@ export default function StaffDashboard() {
   const [viewMode, setViewMode] = useState(() => {
     return localStorage.getItem('staff-attendance-view-mode') || 'Cards + Table';
   });
+
+  // Profiles Mode States
+  const [showStaffProfilesView, setShowStaffProfilesView] = useState(false);
+  const [selectedProfileStaff, setSelectedProfileStaff] = useState(null);
+  const [profileSearchQuery, setProfileSearchQuery] = useState('');
 
   // Calendar states
   const [calendarViewDate, setCalendarViewDate] = useState(new Date());
@@ -2424,6 +2431,462 @@ export default function StaffDashboard() {
     );
   };
 
+  // Profiles Mode Helpers & Stats calculations
+  const getIndividualStats = (staffUid) => {
+    const workingDays = getWorkingDaysInRange(filterFrom, filterTo);
+    const logs = rawLogs.filter(log => 
+      log.userId === staffUid && 
+      log.date >= filterFrom && 
+      log.date <= filterTo
+    );
+    const present = logs.filter(log => log.status === 'present' || log.status === 'late').length;
+    const late = logs.filter(log => log.status === 'late').length;
+    const absent = Math.max(0, workingDays - present);
+    const pct = workingDays > 0 ? Math.round((present / workingDays) * 100) : 0;
+    
+    return { present, absent, late, pct, logs };
+  };
+
+  const renderIndividualCalendarGrid = (staffUid) => {
+    const year = calendarViewDate.getFullYear();
+    const month = calendarViewDate.getMonth();
+    
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const firstDayIndex = new Date(year, month, 1).getDay();
+    const daysInPrevMonth = new Date(year, month, 0).getDate();
+
+    const grid = [];
+    for (let i = firstDayIndex - 1; i >= 0; i--) {
+      grid.push({ day: daysInPrevMonth - i, current: false });
+    }
+    for (let i = 1; i <= daysInMonth; i++) {
+      grid.push({ day: i, current: true });
+    }
+    const remainingSlots = 42 - grid.length;
+    for (let i = 1; i <= remainingSlots; i++) {
+      grid.push({ day: i, current: false });
+    }
+
+    const weekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        {/* Weekday Names row */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '10px', textAlign: 'center', fontWeight: 600, color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+          {weekdays.map((wd, idx) => (
+            <div key={idx} style={{ padding: '4px 0' }}>{wd}</div>
+          ))}
+        </div>
+
+        {/* 42 grid cells */}
+        <div className="calendar-days-grid" style={{ gridTemplateColumns: 'repeat(7, 1fr)', gap: '12px' }}>
+          {grid.map((cell, idx) => {
+            const cellDateStr = getCellDateString(cell.day, cell.current);
+            const isToday = cellDateStr === getTodayDateString();
+            
+            // Check status indicator dots for this day for this specific staff member
+            const dayLogs = cellDateStr ? rawLogs.filter(log => log.date === cellDateStr && log.userId === staffUid) : [];
+            let hasPresent = false;
+            let hasLate = false;
+            let hasAbsent = false;
+
+            if (cellDateStr) {
+              const userLog = dayLogs[0];
+              if (userLog) {
+                if (userLog.status === 'present') hasPresent = true;
+                else if (userLog.status === 'late') hasLate = true;
+                else if (userLog.status === 'absent') hasAbsent = true;
+              } else if (cell.current) {
+                const cellDate = new Date(year, month, cell.day);
+                const today = new Date();
+                today.setHours(0,0,0,0);
+                if (cellDate < today && cellDate.getDay() !== 5) {
+                  hasAbsent = true;
+                }
+              }
+            }
+
+            return (
+              <button
+                key={idx}
+                type="button"
+                disabled={!cell.current}
+                onClick={() => {
+                  setSelectedCalendarDay(cellDateStr);
+                  setIsCalendarModalOpen(true);
+                }}
+                className="calendar-day-btn"
+                style={{
+                  background: 'var(--bg-surface)',
+                  border: '1px solid var(--border-color)',
+                  borderRadius: 'var(--border-radius-sm)',
+                  boxShadow: isToday ? 'var(--neu-shadow-pressed-sm)' : 'var(--neu-shadow-raised-sm)',
+                  padding: '12px 6px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  minHeight: '75px',
+                  cursor: cell.current ? 'pointer' : 'default',
+                  opacity: cell.current ? 1 : 0.35,
+                  outline: 'none',
+                  transition: 'transform var(--transition-fast), background-color var(--transition-fast)'
+                }}
+                onMouseOver={(e) => {
+                  if (cell.current) {
+                    e.currentTarget.style.transform = 'scale(1.02)';
+                    e.currentTarget.style.backgroundColor = 'var(--bg-surface-elevated)';
+                  }
+                }}
+                onMouseOut={(e) => {
+                  if (cell.current) {
+                    e.currentTarget.style.transform = 'scale(1)';
+                    e.currentTarget.style.backgroundColor = 'var(--bg-surface)';
+                  }
+                }}
+              >
+                <span className="calendar-day-num" style={{ fontSize: '0.95rem', fontWeight: isToday ? 700 : 500, color: isToday ? 'var(--color-primary)' : 'var(--text-primary)' }}>
+                  {cell.day}
+                </span>
+                
+                {/* Dots row */}
+                <div style={{ display: 'flex', gap: '4px', justifyContent: 'center', height: '6px', marginTop: '6px' }}>
+                  {hasPresent && <span className="calendar-day-dot" style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: 'var(--color-success)', boxShadow: '0 0 6px var(--color-success)' }} title="Present" />}
+                  {hasLate && <span className="calendar-day-dot" style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: 'var(--color-warning)', boxShadow: '0 0 6px var(--color-warning)' }} title="Late" />}
+                  {hasAbsent && <span className="calendar-day-dot" style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: 'var(--color-danger)', boxShadow: '0 0 6px var(--color-danger)' }} title="Absent" />}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
+  const renderStaffProfilesGrid = () => {
+    const filteredStaff = rawStaffList.filter(staff => {
+      const query = profileSearchQuery.toLowerCase().trim();
+      return (
+        (staff.name || '').toLowerCase().includes(query) ||
+        (staff.username || '').toLowerCase().includes(query) ||
+        (staff.phone || '').toLowerCase().includes(query)
+      );
+    });
+
+    return (
+      <div className="profile-animate-fade" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
+          <div>
+            <h2 style={{ fontSize: '1.5rem', fontFamily: 'var(--font-display)', margin: 0 }}>
+              Staff Profiles
+            </h2>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginTop: '4px' }}>
+              Select any staff member to view their complete attendance history logs.
+            </p>
+          </div>
+          {rawStaffList.length > 0 && (
+            <div style={{ width: '100%', maxWidth: '300px' }}>
+              <NeuInput
+                type="text"
+                placeholder="Search staff..."
+                value={profileSearchQuery}
+                onChange={(e) => setProfileSearchQuery(e.target.value)}
+                icon={Search}
+                style={{ margin: 0 }}
+              />
+            </div>
+          )}
+        </div>
+
+        {rawStaffList.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '48px 0', color: 'var(--text-secondary)' }}>
+            No registered staff members found.
+          </div>
+        ) : filteredStaff.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '48px 0', color: 'var(--text-secondary)' }}>
+            No staff profiles match "{profileSearchQuery}".
+          </div>
+        ) : (
+          <div style={{ 
+            display: 'grid', 
+            gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', 
+            gap: '24px' 
+          }}>
+            {filteredStaff.map(staff => {
+              const { pct } = getIndividualStats(staff.uid);
+              return (
+                <NeuCard 
+                  key={staff.uid}
+                  variant="raised" 
+                  onClick={() => setSelectedProfileStaff(staff)}
+                  style={{ 
+                    padding: '28px', 
+                    display: 'flex', 
+                    flexDirection: 'column', 
+                    alignItems: 'center', 
+                    cursor: 'pointer',
+                    transition: 'transform var(--transition-fast), box-shadow var(--transition-fast)',
+                    textAlign: 'center'
+                  }}
+                  onMouseOver={(e) => {
+                    e.currentTarget.style.transform = 'scale(1.02)';
+                  }}
+                  onMouseOut={(e) => {
+                    e.currentTarget.style.transform = 'scale(1)';
+                  }}
+                >
+                  {/* Initials Avatar */}
+                  <div style={{
+                    width: '72px',
+                    height: '72px',
+                    borderRadius: '50%',
+                    backgroundColor: 'var(--bg-surface-elevated)',
+                    boxShadow: 'var(--neu-shadow-pressed-sm)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '1.75rem',
+                    fontWeight: 700,
+                    color: 'var(--color-primary)',
+                    marginBottom: '16px'
+                  }}>
+                    {staff.name.charAt(0).toUpperCase()}
+                  </div>
+
+                  {/* Name and Username */}
+                  <h4 style={{ fontSize: '1.15rem', fontWeight: 600, margin: '0 0 4px 0', color: 'var(--text-primary)' }}>
+                    {staff.name}
+                  </h4>
+                  <span style={{ 
+                    fontSize: '0.8rem', 
+                    fontWeight: 600,
+                    color: 'var(--text-secondary)',
+                    backgroundColor: 'var(--bg-surface-elevated)',
+                    padding: '2px 8px',
+                    borderRadius: 'var(--border-radius-full)',
+                    boxShadow: 'var(--neu-shadow-pressed-sm)',
+                    marginBottom: '16px'
+                  }}>
+                    @{staff.username}
+                  </span>
+
+                  <div style={{ 
+                    width: '100%', 
+                    height: '1px', 
+                    backgroundColor: 'var(--border-color)', 
+                    margin: '12px 0' 
+                  }} />
+
+                  {/* Contact info */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '16px' }}>
+                    <span>📞 {staff.phone || 'No phone number'}</span>
+                    <span>Joined {formatDateLabel(staff.joinDate ? `${new Date(staff.joinDate.seconds * 1000).toISOString().split('T')[0]}` : '')}</span>
+                  </div>
+
+                  {/* Period Stats Badge */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.9rem' }}>
+                    <span style={{ color: 'var(--text-secondary)' }}>Attendance:</span>
+                    <span style={{ 
+                      fontWeight: 700, 
+                      color: pct >= 90 ? 'var(--color-success)' : pct >= 75 ? 'var(--color-warning)' : 'var(--color-danger)'
+                    }}>
+                      {pct}%
+                    </span>
+                  </div>
+                </NeuCard>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderIndividualHistoryView = () => {
+    if (!selectedProfileStaff) return null;
+    
+    const staff = selectedProfileStaff;
+    const { present, absent, late, pct, logs } = getIndividualStats(staff.uid);
+    const scope = getSelectedMonthScope();
+
+    // Sort logs descending
+    const sortedLogs = [...logs].sort((a, b) => b.date.localeCompare(a.date));
+
+    return (
+      <div className="profile-animate-fade" style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
+        {/* Back Button and Profile Header */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+          <NeuButton 
+            onClick={() => setSelectedProfileStaff(null)}
+            style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+          >
+            <ChevronLeft size={18} />
+            <span>Back to Profiles</span>
+          </NeuButton>
+          <h2 style={{ fontSize: '1.75rem', fontFamily: 'var(--font-display)', margin: 0 }}>
+            {staff.name}'s History
+          </h2>
+        </div>
+
+        {/* Profile Details & Stats */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '24px' }}>
+          {/* Card 1: Attendance Rate */}
+          <NeuCard variant="raised" style={{ padding: '24px', display: 'flex', gap: '20px', alignItems: 'center' }}>
+            <div style={{
+              width: '54px',
+              height: '54px',
+              borderRadius: 'var(--border-radius-md)',
+              backgroundColor: 'var(--bg-surface-elevated)',
+              boxShadow: 'var(--neu-shadow-pressed-sm)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: 'var(--color-primary)'
+            }}>
+              <TrendingUp size={24} />
+            </div>
+            <div>
+              <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Monthly Attendance</p>
+              <h3 style={{ fontSize: '1.75rem', fontWeight: 700, color: pct >= 90 ? 'var(--color-success)' : pct >= 75 ? 'var(--color-warning)' : 'var(--color-danger)' }}>{pct}%</h3>
+            </div>
+          </NeuCard>
+
+          {/* Card 2: Present Days */}
+          <NeuCard variant="raised" style={{ padding: '24px', display: 'flex', gap: '20px', alignItems: 'center' }}>
+            <div style={{
+              width: '54px',
+              height: '54px',
+              borderRadius: 'var(--border-radius-md)',
+              backgroundColor: 'var(--bg-surface-elevated)',
+              boxShadow: 'var(--neu-shadow-pressed-sm)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: 'var(--color-success)'
+            }}>
+              <CheckCircle2 size={24} />
+            </div>
+            <div>
+              <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Present Days</p>
+              <h3 style={{ fontSize: '1.75rem', fontWeight: 700 }}>{present} Days</h3>
+            </div>
+          </NeuCard>
+
+          {/* Card 3: Late Days */}
+          <NeuCard variant="raised" style={{ padding: '24px', display: 'flex', gap: '20px', alignItems: 'center' }}>
+            <div style={{
+              width: '54px',
+              height: '54px',
+              borderRadius: 'var(--border-radius-md)',
+              backgroundColor: 'var(--bg-surface-elevated)',
+              boxShadow: 'var(--neu-shadow-pressed-sm)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: 'var(--color-warning)'
+            }}>
+              <Clock size={24} />
+            </div>
+            <div>
+              <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Late Days</p>
+              <h3 style={{ fontSize: '1.75rem', fontWeight: 700 }}>{late} Days</h3>
+            </div>
+          </NeuCard>
+
+          {/* Card 4: Absent Days */}
+          <NeuCard variant="raised" style={{ padding: '24px', display: 'flex', gap: '20px', alignItems: 'center' }}>
+            <div style={{
+              width: '54px',
+              height: '54px',
+              borderRadius: 'var(--border-radius-md)',
+              backgroundColor: 'var(--bg-surface-elevated)',
+              boxShadow: 'var(--neu-shadow-pressed-sm)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: 'var(--color-danger)'
+            }}>
+              <AlertCircle size={24} />
+            </div>
+            <div>
+              <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Absent Days</p>
+              <h3 style={{ fontSize: '1.75rem', fontWeight: 700 }}>{absent} Days</h3>
+            </div>
+          </NeuCard>
+        </div>
+
+        {/* History Details and Personal Calendar View */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '32px' }}>
+          {/* Left card: History Table */}
+          <NeuCard variant="raised" style={{ padding: '32px', overflowX: 'auto', display: 'flex', flexDirection: 'column' }}>
+            <h3 style={{ fontSize: '1.25rem', marginBottom: '20px', fontFamily: 'var(--font-display)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <FileText size={18} style={{ color: 'var(--color-primary)' }} />
+              <span>Logs ({scope.label})</span>
+            </h3>
+
+            {sortedLogs.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-secondary)' }}>
+                No attendance logs found for this period.
+              </div>
+            ) : (
+              <div className="desktop-table-container">
+                <table className="neu-table">
+                  <thead>
+                    <tr>
+                      <th>Date</th>
+                      <th>Check-In</th>
+                      <th>Status</th>
+                      <th>Marked By</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sortedLogs.map((log) => (
+                      <tr key={log.id || `${log.userId}_${log.date}`}>
+                        <td style={{ fontWeight: 500 }}>{formatDateLabel(log.date)}</td>
+                        <td>{formatTime(log.checkIn)}</td>
+                        <td>
+                          <NeuBadge variant={log.status}>{log.status}</NeuBadge>
+                        </td>
+                        <td style={{ textTransform: 'capitalize', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+                          {log.markedBy || 'manual'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </NeuCard>
+
+          {/* Right card: Personal Month Calendar Grid */}
+          <NeuCard variant="raised" style={{ padding: '32px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+              <h3 style={{ fontSize: '1.25rem', margin: 0, fontFamily: 'var(--font-display)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <CalendarIcon size={18} style={{ color: 'var(--color-primary)' }} />
+                <span>Calendar View</span>
+              </h3>
+              {/* Calendar Navigator controls */}
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <NeuButton onClick={handlePrevCalendarMonth} style={{ padding: '8px' }}>
+                  <ChevronLeft size={16} />
+                </NeuButton>
+                <span style={{ fontSize: '0.9rem', fontWeight: 600, display: 'flex', alignItems: 'center', minWidth: '110px', justifyContent: 'center' }}>
+                  {calendarMonths[calendarViewDate.getMonth()]} {calendarViewDate.getFullYear()}
+                </span>
+                <NeuButton onClick={handleNextCalendarMonth} style={{ padding: '8px' }}>
+                  <ChevronRight size={16} />
+                </NeuButton>
+              </div>
+            </div>
+            
+            {/* Render Calendar Day Grid filtered for this individual */}
+            {renderIndividualCalendarGrid(staff.uid)}
+          </NeuCard>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
       
@@ -2543,6 +3006,47 @@ export default function StaffDashboard() {
             transform: translateY(0);
           }
         }
+
+        @keyframes scaleUpFadeIn {
+          from {
+            opacity: 0;
+            transform: scale(0.98) translateY(10px);
+          }
+          to {
+            opacity: 1;
+            transform: scale(1) translateY(0);
+          }
+        }
+
+        .profile-animate-fade {
+          animation: scaleUpFadeIn 0.45s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+
+        /* High-contrast styles for the Profiles Mode Toggle */
+        .profiles-toggle-custom {
+          padding: 8px 16px;
+          border-radius: var(--border-radius-sm);
+          border: 1px solid var(--border-color);
+          background: var(--bg-surface);
+          box-shadow: var(--neu-shadow-raised-sm);
+          transition: all var(--transition-normal);
+        }
+        .profiles-toggle-custom:hover {
+          border-color: var(--border-color-focus);
+          box-shadow: var(--neu-shadow-raised-md);
+        }
+        .profiles-toggle-custom .neu-toggle-track {
+          background: rgba(148, 163, 184, 0.1) !important;
+          border-color: var(--border-color) !important;
+        }
+        .profiles-toggle-custom.neu-toggle-active {
+          border-color: var(--color-primary-glow) !important;
+          box-shadow: var(--neu-shadow-pressed-sm), 0 0 10px rgba(99, 102, 241, 0.1) !important;
+        }
+        .profiles-toggle-custom.neu-toggle-active .neu-toggle-track {
+          background: rgba(99, 102, 241, 0.15) !important;
+          border-color: var(--color-primary) !important;
+        }
       `}</style>
 
       {/* Title Header Section */}
@@ -2558,14 +3062,29 @@ export default function StaffDashboard() {
 
         {/* View Switcher and Actions container */}
         <div style={{ display: 'flex', gap: '16px', alignItems: 'center', flexWrap: 'wrap' }}>
-          <NeuSegmentedControl
-            options={['Cards + Table', 'Table Only', 'Calendar View']}
-            selectedValue={viewMode}
-            onChange={handleViewModeChange}
-          />
+          {/* Toggle for Profiles Mode */}
+          <div style={{ display: 'flex', alignItems: 'center', marginRight: '8px' }}>
+            <NeuToggle
+              label="Profiles Mode"
+              className="profiles-toggle-custom"
+              checked={showStaffProfilesView}
+              onChange={(val) => {
+                setShowStaffProfilesView(val);
+                setSelectedProfileStaff(null);
+              }}
+            />
+          </div>
+
+          {!showStaffProfilesView && (
+            <NeuSegmentedControl
+              options={['Cards + Table', 'Table Only', 'Calendar View']}
+              selectedValue={viewMode}
+              onChange={handleViewModeChange}
+            />
+          )}
 
           {/* Actions Container - Visible to Admin and Staff */}
-          {(isAdmin || isStaff) && (
+          {(isAdmin || isStaff) && !showStaffProfilesView && (
             <div style={{ display: 'flex', gap: '12px' }}>
               <NeuButton 
                 onClick={handleOpenManualRecordModal}
@@ -2580,15 +3099,17 @@ export default function StaffDashboard() {
       </div>
 
       {/* Info Card explaining the current state */}
-      <NeuCard variant="raised" style={{ padding: '24px' }}>
-        <h3 style={{ fontSize: '1.25rem', marginBottom: '8px', fontFamily: 'var(--font-display)' }}>
-          Module Overview
-        </h3>
-        <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', lineHeight: '1.6' }}>
-          This page serves as the entry point for staff attendance logging and history tracking. 
-          Use the filter bar below to refine records. Statistics and logs will update dynamically.
-        </p>
-      </NeuCard>
+      {!showStaffProfilesView && (
+        <NeuCard variant="raised" style={{ padding: '24px' }}>
+          <h3 style={{ fontSize: '1.25rem', marginBottom: '8px', fontFamily: 'var(--font-display)' }}>
+            Module Overview
+          </h3>
+          <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', lineHeight: '1.6' }}>
+            This page serves as the entry point for staff attendance logging and history tracking. 
+            Use the filter bar below to refine records. Statistics and logs will update dynamically.
+          </p>
+        </NeuCard>
+      )}
 
       {/* Global stats error block */}
       {statsError && (
@@ -2608,36 +3129,42 @@ export default function StaffDashboard() {
         </div>
       )}
 
-      {/* Content Render Driven by View Switcher state */}
-      <div style={{ position: 'relative' }}>
-        
-        {/* VIEW 1: Cards + Table */}
-        {viewMode === 'Cards + Table' && (
-          <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
-            {renderSummaryCards()}
-            {renderFilterBar()}
-            {renderLogsSection()}
-          </div>
-        )}
+      {/* Content Render Driven by Profiles Mode Toggle and View Switcher states */}
+      {showStaffProfilesView ? (
+        <div className="profile-animate-fade" style={{ position: 'relative' }}>
+          {selectedProfileStaff ? renderIndividualHistoryView() : renderStaffProfilesGrid()}
+        </div>
+      ) : (
+        <div style={{ position: 'relative' }}>
+          
+          {/* VIEW 1: Cards + Table */}
+          {viewMode === 'Cards + Table' && (
+            <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
+              {renderSummaryCards()}
+              {renderFilterBar()}
+              {renderLogsSection()}
+            </div>
+          )}
 
-        {/* VIEW 2: Table Only */}
-        {viewMode === 'Table Only' && (
-          <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
-            {renderFilterBar()}
-            {renderLogsSection()}
-          </div>
-        )}
+          {/* VIEW 2: Table Only */}
+          {viewMode === 'Table Only' && (
+            <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
+              {renderFilterBar()}
+              {renderLogsSection()}
+            </div>
+          )}
 
-        {/* VIEW 3: Calendar View */}
-        {viewMode === 'Calendar View' && (
-          <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
-            {renderCalendarView()}
-          </div>
-        )}
-      </div>
+          {/* VIEW 3: Calendar View */}
+          {viewMode === 'Calendar View' && (
+            <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
+              {renderCalendarView()}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Monthly Summary Table (Admin Only) */}
-      {renderMonthlySummaryTable()}
+      {!showStaffProfilesView && renderMonthlySummaryTable()}
 
       {/* Calendar Popup Day Details Modal */}
       {isCalendarModalOpen && selectedCalendarDay && (

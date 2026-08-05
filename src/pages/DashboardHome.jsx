@@ -92,6 +92,7 @@ export default function DashboardHome(props) {
   // Staff list & Directory state
   const [staffList, setStaffList] = useState([]);
   const [visiblePasswords, setVisiblePasswords] = useState({}); // maps uid -> boolean
+  const [searchStaffQuery, setSearchStaffQuery] = useState('');
   
   // Create Staff Form State
   const [fullName, setFullName] = useState('');
@@ -327,6 +328,16 @@ export default function DashboardHome(props) {
     const today = new Date().toISOString().split('T')[0];
     return log.date === today && log.status === 'present';
   }).length;
+
+  // Filtered staff list for registry search
+  const filteredStaffList = staffList.filter(member => {
+    const query = searchStaffQuery.toLowerCase().trim();
+    return (
+      (member.name || '').toLowerCase().includes(query) ||
+      (member.username || '').toLowerCase().includes(query) ||
+      (member.phone || '').toLowerCase().includes(query)
+    );
+  });
 
   return (
     <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
@@ -645,14 +656,39 @@ export default function DashboardHome(props) {
 
             {/* Staff Directory */}
             <NeuCard variant="raised" style={{ padding: '32px', overflowX: 'auto' }}>
-              <h3 style={{ fontSize: '1.25rem', marginBottom: '20px', fontFamily: 'var(--font-display)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Users size={18} style={{ color: 'var(--color-primary)' }} />
-                <span>Staff Account Registry</span>
-              </h3>
+              <div style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: '16px',
+                marginBottom: '20px'
+              }}>
+                <h3 style={{ fontSize: '1.25rem', margin: 0, fontFamily: 'var(--font-display)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Users size={18} style={{ color: 'var(--color-primary)' }} />
+                  <span>Staff Account Registry</span>
+                </h3>
+                {staffList.length > 0 && (
+                  <div style={{ width: '100%', maxWidth: '300px' }}>
+                    <NeuInput
+                      type="text"
+                      placeholder="Search staff..."
+                      value={searchStaffQuery}
+                      onChange={(e) => setSearchStaffQuery(e.target.value)}
+                      icon={Search}
+                      style={{ margin: 0 }}
+                    />
+                  </div>
+                )}
+              </div>
 
               {staffList.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-secondary)' }}>
                   No registered staff accounts found. Create one above.
+                </div>
+              ) : filteredStaffList.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-secondary)' }}>
+                  No staff accounts match your search.
                 </div>
               ) : (
                 <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '850px' }}>
@@ -668,7 +704,7 @@ export default function DashboardHome(props) {
                     </tr>
                   </thead>
                   <tbody>
-                    {staffList.map((member) => {
+                    {filteredStaffList.map((member) => {
                       const isPassVisible = visiblePasswords[member.uid];
                       return (
                         <tr 

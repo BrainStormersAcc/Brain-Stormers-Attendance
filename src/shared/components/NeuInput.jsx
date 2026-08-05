@@ -52,13 +52,14 @@ export default function NeuInput({
           disabled={disabled}
           required={required}
           className="neu-input"
+          {...props}
           style={{
             paddingLeft: Icon ? '46px' : '16px',
             paddingRight: type === 'password' ? '46px' : '16px',
             width: '100%',
-            boxSizing: 'border-box'
+            boxSizing: 'border-box',
+            ...props.style
           }}
-          {...props}
         />
 
         {/* Toggle password visibility button */}
