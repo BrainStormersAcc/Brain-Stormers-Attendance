@@ -68,6 +68,10 @@ service cloud.firestore {
         isAdmin() || (
           resource.data.userId == request.auth.uid &&
           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['checkOut', 'status'])
+        ) || (
+          resource.data.markedByUserId == request.auth.uid &&
+          request.time < resource.data.createdAt + duration.value(10, 'm') &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['checkIn', 'status', 'selfEdited', 'selfEditedAt'])
         )
       );
       allow delete: if false;
@@ -76,7 +80,11 @@ service cloud.firestore {
     // Rules for auditLogs collection
     match /auditLogs/{logId} {
       allow read: if isAdmin();
-      allow create: if isAdmin();
+      allow create: if isAdmin() || (
+        isSignedIn() &&
+        request.resource.data.action == 'self-edit' &&
+        request.resource.data.performedBy == request.auth.uid
+      );
       allow update, delete: if false;
     }
   }

@@ -41,6 +41,9 @@ import {
 } from 'firebase/firestore';
 import { getAllStaff, getAllAttendance } from '../../../services/adminService.js';
 
+// Configuration constant for self-edit capability window
+export const EDIT_WINDOW_MINUTES = 10;
+
 export default function StaffDashboard() {
   const { currentUser, userProfile, loading } = useAuth();
   
@@ -88,6 +91,43 @@ export default function StaffDashboard() {
   const [deleteReason, setDeleteReason] = useState('');
   const [deleteError, setDeleteError] = useState('');
   const [deleteSubmitting, setDeleteSubmitting] = useState(false);
+
+  // Self-edit window configuration & state
+  const [now, setNow] = useState(new Date());
+  const [isSelfEditModalOpen, setIsSelfEditModalOpen] = useState(false);
+  const [selfEditRecord, setSelfEditRecord] = useState(null);
+  const [selfEditStatus, setSelfEditStatus] = useState('present');
+  const [selfEditCheckIn, setSelfEditCheckIn] = useState('');
+  const [selfEditSubmitting, setSelfEditSubmitting] = useState(false);
+  const [selfEditError, setSelfEditError] = useState('');
+
+  // Live timer tick
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setNow(new Date());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const getEditableTimeRemaining = (log) => {
+    if (!log || !log.createdAt || !log.markedByUserId || log.markedByUserId !== currentUser?.uid) {
+      return 0;
+    }
+    const createdTime = log.createdAt.seconds 
+      ? new Date(log.createdAt.seconds * 1000) 
+      : new Date(log.createdAt);
+    const elapsedMs = now - createdTime;
+    const windowMs = EDIT_WINDOW_MINUTES * 60 * 1000;
+    const remainingMs = windowMs - elapsedMs;
+    return remainingMs > 0 ? remainingMs : 0;
+  };
+
+  const formatCountdown = (remainingMs) => {
+    const totalSeconds = Math.floor(remainingMs / 1000);
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return `${minutes}:${String(seconds).padStart(2, '0')}`;
+  };
   const [deleteSuccess, setDeleteSuccess] = useState(false);
 
   // Refs for modal dropdowns and clicks outside
@@ -263,6 +303,105 @@ export default function StaffDashboard() {
       fetchRawData();
     }
   }, [currentUser, userProfile]);
+
+  const handleOpenSelfEditModal = (log) => {
+    setSelfEditRecord(log);
+    setSelfEditStatus(log.status);
+    
+    // Pre-fill check-in time input in HH:MM format
+    const formatTimeInput = (timestamp) => {
+      if (!timestamp) return '';
+      const date = new Date(timestamp.seconds ? timestamp.seconds * 1000 : timestamp);
+      const hours = String(date.getHours()).padStart(2, '0');
+      const minutes = String(date.getMinutes()).padStart(2, '0');
+      return `${hours}:${minutes}`;
+    };
+    
+    setSelfEditCheckIn(formatTimeInput(log.checkIn));
+    setSelfEditError('');
+    setIsSelfEditModalOpen(true);
+  };
+
+  const handleSaveSelfEdit = async (e) => {
+    e.preventDefault();
+    if (!selfEditRecord) return;
+    
+    // Check if the window is still open on submit (double check)
+    const remainingMs = getEditableTimeRemaining(selfEditRecord);
+    if (remainingMs <= 0) {
+      setSelfEditError('Edit window has expired. You can no longer self-correct this record.');
+      return;
+    }
+
+    setSelfEditSubmitting(true);
+    setSelfEditError('');
+
+    try {
+      const batch = writeBatch(db);
+      const attendanceRef = doc(db, 'attendance', selfEditRecord.id);
+
+      // Compile check-in date
+      const [hours, minutes] = selfEditCheckIn.split(':').map(Number);
+      const logDate = selfEditRecord.date; // Keep original date
+      const [year, month, day] = logDate.split('-').map(Number);
+      const checkInDate = new Date(year, month - 1, day, hours, minutes, 0);
+
+      const updatedFields = {
+        checkIn: checkInDate,
+        status: selfEditStatus,
+        selfEdited: true,
+        selfEditedAt: serverTimestamp()
+      };
+
+      batch.update(attendanceRef, updatedFields);
+
+      // Audit logs (action: "self-edit", performedBy: current user's uid)
+      const previousData = {
+        userId: selfEditRecord.userId,
+        role: selfEditRecord.role,
+        date: selfEditRecord.date,
+        checkIn: selfEditRecord.checkIn,
+        checkOut: selfEditRecord.checkOut || null,
+        status: selfEditRecord.status,
+        markedBy: selfEditRecord.markedBy,
+        isDeleted: selfEditRecord.isDeleted || false,
+        markedByUserId: selfEditRecord.markedByUserId || null,
+        createdAt: selfEditRecord.createdAt || null
+      };
+
+      const newData = {
+        ...previousData,
+        checkIn: checkInDate,
+        status: selfEditStatus,
+        selfEdited: true,
+        selfEditedAt: serverTimestamp()
+      };
+
+      const auditLogRef = doc(collection(db, 'auditLogs'));
+      const auditLogData = {
+        action: 'self-edit',
+        targetCollection: 'attendance',
+        targetDocId: selfEditRecord.id,
+        performedBy: currentUser.uid,
+        performedByName: userProfile?.name || 'Staff Member',
+        timestamp: serverTimestamp(),
+        reason: 'Self-corrected within edit window',
+        previousData,
+        newData
+      };
+
+      batch.set(auditLogRef, auditLogData);
+      await batch.commit();
+
+      setIsSelfEditModalOpen(false);
+      await fetchRawData();
+    } catch (err) {
+      console.error('Error saving self-edit:', err);
+      setSelfEditError(err.message || 'Failed to update record.');
+    } finally {
+      setSelfEditSubmitting(false);
+    }
+  };
 
   // Form initialization helper
   const handleOpenManualRecordModal = () => {
@@ -455,7 +594,9 @@ export default function StaffDashboard() {
             checkOut: checkOutDate || null,
             status: manualStatus,
             markedBy: 'admin-manual',
-            isDeleted: false
+            isDeleted: false,
+            createdAt: serverTimestamp(),
+            markedByUserId: currentUser.uid
           };
 
           batch.set(attendanceRef, newAttendanceData);
@@ -497,7 +638,9 @@ export default function StaffDashboard() {
           checkOut: checkOutDate || null,
           status: manualStatus,
           markedBy: 'self-checkin',
-          isDeleted: false
+          isDeleted: false,
+          createdAt: serverTimestamp(),
+          markedByUserId: currentUser.uid
         };
 
         batch.set(attendanceRef, newAttendanceData);
@@ -1501,7 +1644,7 @@ export default function StaffDashboard() {
                     <th>Check-In</th>
                     <th>Status</th>
                     {(isAdmin || isStaff) && <th>Marked By</th>}
-                    {isAdmin && <th style={{ textAlign: 'center' }}>Actions</th>}
+                    {(isAdmin || isStaff) && <th style={{ textAlign: 'center' }}>Actions</th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -1527,7 +1670,7 @@ export default function StaffDashboard() {
                     <th>Check-In</th>
                     <th>Status</th>
                     {(isAdmin || isStaff) && <th>Marked By</th>}
-                    {isAdmin && <th style={{ textAlign: 'center' }}>Actions</th>}
+                    {(isAdmin || isStaff) && <th style={{ textAlign: 'center' }}>Actions</th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -1569,71 +1712,112 @@ export default function StaffDashboard() {
                           )}
                         </td>
                       )}
-                      {isAdmin && (
+                      {(isAdmin || isStaff) && (
                         <td style={{ textAlign: 'center' }}>
                           <div style={{ display: 'inline-flex', gap: '10px', justifyContent: 'center', alignItems: 'center' }}>
-                            <button
-                              type="button"
-                              onClick={() => handleOpenEditModal(log)}
-                              style={{
-                                background: 'none',
-                                border: 'none',
-                                cursor: 'pointer',
-                                color: 'var(--text-primary)',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                padding: '8px',
-                                borderRadius: 'var(--border-radius-sm)',
-                                boxShadow: 'var(--neu-shadow-raised-sm)',
-                                transition: 'all var(--transition-fast)',
-                                outline: 'none'
-                              }}
-                              onMouseOver={(e) => {
-                                e.currentTarget.style.boxShadow = 'var(--neu-shadow-pressed-sm)';
-                                e.currentTarget.style.color = 'var(--color-primary)';
-                              }}
-                              onMouseOut={(e) => {
-                                e.currentTarget.style.boxShadow = 'var(--neu-shadow-raised-sm)';
-                                e.currentTarget.style.color = 'var(--text-primary)';
-                              }}
-                              title="Edit Attendance Log"
-                            >
-                              <Edit size={14} />
-                            </button>
+                            {isAdmin && (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenEditModal(log)}
+                                  style={{
+                                    background: 'none',
+                                    border: 'none',
+                                    cursor: 'pointer',
+                                    color: 'var(--text-primary)',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    padding: '8px',
+                                    borderRadius: 'var(--border-radius-sm)',
+                                    boxShadow: 'var(--neu-shadow-raised-sm)',
+                                    transition: 'all var(--transition-fast)',
+                                    outline: 'none'
+                                  }}
+                                  onMouseOver={(e) => {
+                                    e.currentTarget.style.boxShadow = 'var(--neu-shadow-pressed-sm)';
+                                    e.currentTarget.style.color = 'var(--color-primary)';
+                                  }}
+                                  onMouseOut={(e) => {
+                                    e.currentTarget.style.boxShadow = 'var(--neu-shadow-raised-sm)';
+                                    e.currentTarget.style.color = 'var(--text-primary)';
+                                  }}
+                                  title="Edit Attendance Log"
+                                >
+                                  <Edit size={14} />
+                                </button>
 
-                            <button
-                              type="button"
-                              onClick={() => handleOpenDeleteModal(log)}
-                              style={{
-                                background: 'none',
-                                border: 'none',
-                                cursor: 'pointer',
-                                color: 'var(--color-danger)',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                padding: '8px',
-                                borderRadius: 'var(--border-radius-sm)',
-                                boxShadow: 'var(--neu-shadow-raised-sm)',
-                                transition: 'all var(--transition-fast)',
-                                outline: 'none',
-                                opacity: 0.85
-                              }}
-                              onMouseOver={(e) => {
-                                e.currentTarget.style.boxShadow = 'var(--neu-shadow-pressed-sm)';
-                                e.currentTarget.style.color = '#ef4444';
-                                e.currentTarget.style.opacity = 1;
-                              }}
-                              onMouseOut={(e) => {
-                                e.currentTarget.style.boxShadow = 'var(--neu-shadow-raised-sm)';
-                                e.currentTarget.style.color = 'var(--color-danger)';
-                                e.currentTarget.style.opacity = 0.85;
-                              }}
-                              title="Delete Attendance Log"
-                            >
-                              <Trash2 size={14} />
-                            </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenDeleteModal(log)}
+                                  style={{
+                                    background: 'none',
+                                    border: 'none',
+                                    cursor: 'pointer',
+                                    color: 'var(--color-danger)',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    padding: '8px',
+                                    borderRadius: 'var(--border-radius-sm)',
+                                    boxShadow: 'var(--neu-shadow-raised-sm)',
+                                    transition: 'all var(--transition-fast)',
+                                    outline: 'none',
+                                    opacity: 0.85
+                                  }}
+                                  onMouseOver={(e) => {
+                                    e.currentTarget.style.boxShadow = 'var(--neu-shadow-pressed-sm)';
+                                    e.currentTarget.style.color = '#ef4444';
+                                    e.currentTarget.style.opacity = 1;
+                                  }}
+                                  onMouseOut={(e) => {
+                                    e.currentTarget.style.boxShadow = 'var(--neu-shadow-raised-sm)';
+                                    e.currentTarget.style.color = 'var(--color-danger)';
+                                    e.currentTarget.style.opacity = 0.85;
+                                  }}
+                                  title="Delete Attendance Log"
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              </>
+                            )}
+
+                            {!isAdmin && (() => {
+                              const remainingMs = getEditableTimeRemaining(log);
+                              if (remainingMs > 0) {
+                                return (
+                                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleOpenSelfEditModal(log)}
+                                      style={{
+                                        background: 'none',
+                                        border: 'none',
+                                        cursor: 'pointer',
+                                        color: 'var(--color-primary)',
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        padding: '8px',
+                                        borderRadius: 'var(--border-radius-sm)',
+                                        boxShadow: 'var(--neu-shadow-raised-sm)',
+                                        transition: 'all var(--transition-fast)',
+                                        outline: 'none'
+                                      }}
+                                      onMouseOver={(e) => e.currentTarget.style.boxShadow = 'var(--neu-shadow-pressed-sm)'}
+                                      onMouseOut={(e) => e.currentTarget.style.boxShadow = 'var(--neu-shadow-raised-sm)'}
+                                      title="Self Correct Attendance Log"
+                                    >
+                                      <Edit size={14} />
+                                    </button>
+                                    <span style={{ fontSize: '0.75rem', color: 'var(--color-warning)', fontWeight: 600, fontFamily: 'monospace' }}>
+                                      Editable for {formatCountdown(remainingMs)}
+                                    </span>
+                                  </div>
+                                );
+                              }
+                              return null;
+                            })()}
                           </div>
                         </td>
                       )}
@@ -1676,7 +1860,7 @@ export default function StaffDashboard() {
                       <span style={{ fontWeight: 600 }}>{formatTime(log.checkIn)}</span>
                     </div>
                   </div>
-                  {isAdmin && (
+                  {(isAdmin || (!isAdmin && getEditableTimeRemaining(log) > 0)) && (
                     <div style={{ 
                       fontSize: '0.8rem', 
                       color: 'var(--text-muted)', 
@@ -1686,58 +1870,87 @@ export default function StaffDashboard() {
                       justifyContent: 'space-between',
                       alignItems: 'center'
                     }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <span>Marked By:</span>
-                        <span style={{ textTransform: 'capitalize', fontWeight: 600, color: 'var(--text-secondary)' }}>
-                          {log.markedBy || 'manual'}
-                        </span>
-                        {log.lastEditedBy && (
-                          <span 
-                            style={{ 
-                              padding: '1px 4px', 
-                              borderRadius: '3px', 
-                              fontSize: '0.6rem', 
-                              fontWeight: 700, 
-                              backgroundColor: 'rgba(59, 130, 246, 0.1)', 
-                              color: '#3b82f6',
-                              border: '1px solid rgba(59, 130, 246, 0.25)',
-                              marginLeft: '4px'
-                            }}
-                            title="Manually adjusted by Admin"
-                          >
-                            Edited
-                          </span>
-                        )}
-                      </div>
-                      <div style={{ display: 'flex', gap: '8px' }}>
-                        <NeuButton 
-                          onClick={() => handleOpenEditModal(log)} 
-                          style={{ 
-                            padding: '4px 10px', 
-                            fontSize: '0.75rem', 
-                            display: 'flex', 
-                            alignItems: 'center', 
-                            gap: '4px' 
-                          }}
-                        >
-                          <Edit size={12} />
-                          <span>Edit</span>
-                        </NeuButton>
-                        <NeuButton 
-                          onClick={() => handleOpenDeleteModal(log)} 
-                          style={{ 
-                            padding: '4px 10px', 
-                            fontSize: '0.75rem', 
-                            display: 'flex', 
-                            alignItems: 'center', 
-                            gap: '4px',
-                            color: 'var(--color-danger)'
-                          }}
-                        >
-                          <Trash2 size={12} />
-                          <span>Delete</span>
-                        </NeuButton>
-                      </div>
+                      {isAdmin ? (
+                        <>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <span>Marked By:</span>
+                            <span style={{ textTransform: 'capitalize', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                              {log.markedBy || 'manual'}
+                            </span>
+                            {log.lastEditedBy && (
+                              <span 
+                                style={{ 
+                                  padding: '1px 4px', 
+                                  borderRadius: '3px', 
+                                  fontSize: '0.6rem', 
+                                  fontWeight: 700, 
+                                  backgroundColor: 'rgba(59, 130, 246, 0.1)', 
+                                  color: '#3b82f6',
+                                  border: '1px solid rgba(59, 130, 246, 0.25)',
+                                  marginLeft: '4px'
+                                }}
+                                title="Manually adjusted by Admin"
+                              >
+                                Edited
+                              </span>
+                            )}
+                          </div>
+                          <div style={{ display: 'flex', gap: '8px' }}>
+                            <NeuButton 
+                              onClick={() => handleOpenEditModal(log)} 
+                              style={{ 
+                                padding: '4px 10px', 
+                                fontSize: '0.75rem', 
+                                display: 'flex', 
+                                alignItems: 'center', 
+                                gap: '4px' 
+                              }}
+                            >
+                              <Edit size={12} />
+                              <span>Edit</span>
+                            </NeuButton>
+                            <NeuButton 
+                              onClick={() => handleOpenDeleteModal(log)} 
+                              style={{ 
+                                padding: '4px 10px', 
+                                fontSize: '0.75rem', 
+                                display: 'flex', 
+                                alignItems: 'center', 
+                                gap: '4px',
+                                color: 'var(--color-danger)'
+                              }}
+                            >
+                              <Trash2 size={12} />
+                              <span>Delete</span>
+                            </NeuButton>
+                          </div>
+                        </>
+                      ) : (() => {
+                        const remainingMs = getEditableTimeRemaining(log);
+                        if (remainingMs > 0) {
+                          return (
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+                              <span style={{ fontSize: '0.75rem', color: 'var(--color-warning)', fontWeight: 600, fontFamily: 'monospace' }}>
+                                Editable for {formatCountdown(remainingMs)}
+                              </span>
+                              <NeuButton 
+                                onClick={() => handleOpenSelfEditModal(log)} 
+                                style={{ 
+                                  padding: '4px 10px', 
+                                  fontSize: '0.75rem', 
+                                  display: 'flex', 
+                                  alignItems: 'center', 
+                                  gap: '4px' 
+                                }}
+                              >
+                                <Edit size={12} />
+                                <span>Edit</span>
+                              </NeuButton>
+                            </div>
+                          );
+                        }
+                        return null;
+                      })()}
                     </div>
                   )}
                 </NeuCard>
@@ -3306,7 +3519,43 @@ export default function StaffDashboard() {
                       
                       {staffLog ? (
                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
-                          <NeuBadge variant={staffLog.status}>{staffLog.status}</NeuBadge>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            {(() => {
+                              const remainingMs = getEditableTimeRemaining(staffLog);
+                              if (remainingMs > 0) {
+                                return (
+                                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                                    <span style={{ fontSize: '0.7rem', color: 'var(--color-warning)', fontWeight: 600, fontFamily: 'monospace' }}>
+                                      {formatCountdown(remainingMs)}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setIsCalendarModalOpen(false);
+                                        handleOpenSelfEditModal(staffLog);
+                                      }}
+                                      style={{
+                                        background: 'none',
+                                        border: 'none',
+                                        cursor: 'pointer',
+                                        color: 'var(--color-primary)',
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        padding: '4px',
+                                        borderRadius: 'var(--border-radius-sm)',
+                                        boxShadow: 'var(--neu-shadow-raised-sm)',
+                                        outline: 'none'
+                                      }}
+                                    >
+                                      <Edit size={10} />
+                                    </button>
+                                  </div>
+                                );
+                              }
+                              return null;
+                            })()}
+                            <NeuBadge variant={staffLog.status}>{staffLog.status}</NeuBadge>
+                          </div>
                           <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
                             Entry: {formatTime(staffLog.checkIn)}
                           </span>
@@ -3343,6 +3592,29 @@ export default function StaffDashboard() {
                             </span>
                           </NeuCard>
                         </div>
+                        {(() => {
+                          const remainingMs = getEditableTimeRemaining(myLog);
+                          if (remainingMs > 0) {
+                            return (
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', background: 'var(--bg-surface-elevated)', borderRadius: 'var(--border-radius-sm)', border: '1px solid var(--border-color)' }}>
+                                <span style={{ fontSize: '0.75rem', color: 'var(--color-warning)', fontWeight: 600, fontFamily: 'monospace' }}>
+                                  Editable for {formatCountdown(remainingMs)}
+                                </span>
+                                <NeuButton 
+                                  onClick={() => {
+                                    setIsCalendarModalOpen(false);
+                                    handleOpenSelfEditModal(myLog);
+                                  }} 
+                                  style={{ padding: '4px 10px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px' }}
+                                >
+                                  <Edit size={12} />
+                                  <span>Edit</span>
+                                </NeuButton>
+                              </div>
+                            );
+                          }
+                          return null;
+                        })()}
                       </div>
                     );
                   } else {
@@ -3910,6 +4182,191 @@ export default function StaffDashboard() {
               </form>
             </NeuCard>
           )}
+        </div>,
+        document.body
+      )}
+
+      {/* Self-Edit/Correction Modal */}
+      {isSelfEditModalOpen && selfEditRecord && createPortal(
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(15, 23, 42, 0.3)',
+          backdropFilter: 'blur(10px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1100,
+          padding: '20px'
+        }}>
+          <NeuCard
+            variant="raised"
+            style={{
+              width: '100%',
+              maxWidth: '440px',
+              position: 'relative',
+              padding: '36px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '24px'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Close Button */}
+            <button 
+              onClick={() => setIsSelfEditModalOpen(false)}
+              disabled={selfEditSubmitting}
+              style={{
+                position: 'absolute',
+                top: '20px',
+                right: '20px',
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                color: 'var(--text-secondary)'
+              }}
+            >
+              <X size={20} />
+            </button>
+
+            <div>
+              <h3 style={{ fontSize: '1.4rem', fontFamily: 'var(--font-display)', marginBottom: '8px' }}>
+                Self-Correct Record
+              </h3>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', lineHeight: '1.5' }}>
+                Quickly adjust your check-in time or status if you made an honest mistake.
+              </p>
+            </div>
+
+            <form onSubmit={handleSaveSelfEdit} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              {/* Staff Member Info (Non-editable) */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <span className="neu-input-label">Staff Member</span>
+                <div style={{
+                  padding: '12px 16px',
+                  background: 'var(--bg-surface-elevated)',
+                  borderRadius: 'var(--border-radius-sm)',
+                  border: '1px solid var(--border-color)',
+                  color: 'var(--text-secondary)',
+                  fontSize: '0.95rem',
+                  fontWeight: 600
+                }}>
+                  {staffNameMap[selfEditRecord.userId] || 'Unknown User'}
+                </div>
+              </div>
+
+              {/* Date (Non-editable) */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <span className="neu-input-label">Date</span>
+                <div style={{
+                  padding: '12px 16px',
+                  background: 'var(--bg-surface-elevated)',
+                  borderRadius: 'var(--border-radius-sm)',
+                  border: '1px solid var(--border-color)',
+                  color: 'var(--text-secondary)',
+                  fontSize: '0.95rem',
+                  fontWeight: 600
+                }}>
+                  {formatDateLabel(selfEditRecord.date)}
+                </div>
+              </div>
+
+              {/* Check-In Time (Editable) */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <label htmlFor="selfEditCheckInTime" className="neu-input-label">Check-In Time *</label>
+                <input
+                  id="selfEditCheckInTime"
+                  type="time"
+                  value={selfEditCheckIn}
+                  onChange={(e) => setSelfEditCheckIn(e.target.value)}
+                  required
+                  style={{
+                    width: '100%',
+                    padding: '12px 16px',
+                    background: 'var(--bg-surface)',
+                    color: 'var(--text-primary)',
+                    border: '1px solid var(--border-color)',
+                    borderRadius: 'var(--border-radius-sm)',
+                    boxShadow: 'var(--neu-shadow-raised-sm)',
+                    fontFamily: 'monospace',
+                    fontSize: '1rem',
+                    outline: 'none',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+
+              {/* Status (Editable - Present/Late) */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <label className="neu-input-label">Status *</label>
+                <div style={{ display: 'flex', gap: '16px' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', color: 'var(--text-primary)' }}>
+                    <input
+                      type="radio"
+                      name="selfEditStatus"
+                      value="present"
+                      checked={selfEditStatus === 'present'}
+                      onChange={() => setSelfEditStatus('present')}
+                      style={{ cursor: 'pointer' }}
+                    />
+                    <span>Present</span>
+                  </label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', color: 'var(--text-primary)' }}>
+                    <input
+                      type="radio"
+                      name="selfEditStatus"
+                      value="late"
+                      checked={selfEditStatus === 'late'}
+                      onChange={() => setSelfEditStatus('late')}
+                      style={{ cursor: 'pointer' }}
+                    />
+                    <span>Late</span>
+                  </label>
+                </div>
+              </div>
+
+              {/* Inline error block */}
+              {selfEditError && (
+                <div style={{
+                  padding: '12px 16px',
+                  borderRadius: 'var(--border-radius-sm)',
+                  border: '1px solid var(--color-danger)',
+                  backgroundColor: 'rgba(239, 68, 68, 0.05)',
+                  color: 'var(--color-danger)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  fontSize: '0.9rem'
+                }}>
+                  <AlertCircle size={18} />
+                  <span style={{ lineHeight: '1.4' }}>{selfEditError}</span>
+                </div>
+              )}
+
+              {/* Form Action buttons */}
+              <div style={{ display: 'flex', gap: '16px', marginTop: '8px' }}>
+                <NeuButton
+                  type="button"
+                  onClick={() => setIsSelfEditModalOpen(false)}
+                  style={{ flex: 1, justifyContent: 'center' }}
+                  disabled={selfEditSubmitting}
+                >
+                  Cancel
+                </NeuButton>
+                <NeuButton
+                  type="submit"
+                  variant="accent"
+                  style={{ flex: 1, justifyContent: 'center' }}
+                  disabled={selfEditSubmitting}
+                >
+                  {selfEditSubmitting ? 'Saving...' : 'Save Changes'}
+                </NeuButton>
+              </div>
+            </form>
+          </NeuCard>
         </div>,
         document.body
       )}

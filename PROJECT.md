@@ -191,6 +191,25 @@ The "Staff Attendance" module is a shared route accessible at `/staff-attendance
 - **PDF Export**: print-optimized layout written to a target window (`window.open`). Summarizes active search filters in a slate box, and renders a clean, professional border-based table with a generation timestamp footer.
 - **Export Control**: Dropdown menu opens with a slide-down + fade-in CSS keyframes animation. Escape key pressing and clicking outside auto-dismisses the dropdown.
 
+### D. Time-Limited Staff Self-Edit System (Self-Correction Window)
+To allow staff members to quickly correct honest entry mistakes (e.g., choosing the wrong status or selecting the wrong check-in time), a lightweight self-edit window is implemented:
+1. **The Edit Window**: Valid for exactly 10 minutes from the record's creation time (`createdAt`). This configuration is defined via the `EDIT_WINDOW_MINUTES = 10` constant in the staff dashboard module.
+2. **Eligibility Checks**: A record is editable by a staff member only if:
+   - The record was created within the last 10 minutes (based on `createdAt`).
+   - The record was created by the currently logged-in user (`markedByUserId == currentUser.uid`). This means a user can edit records they logged for themselves or logs they peer-marked for colleagues within the 10-minute window.
+3. **UI Elements**: 
+   - Eligible cards/rows in the table and calendar details modal display a small "Edit" icon alongside a live countdown timer showing the remaining minutes and seconds (e.g., `"Editable for 4:32"`). 
+   - The countdown timer updates in real-time every second and disappears instantly once the window reaches zero (no page reload required).
+4. **Lightweight Modal**: 
+   - Clicking Edit opens a simplified modal with only the `Check-In Time` and `Status` (Present/Late) fields editable.
+   - Date and assignee (`userId`) are non-modifiable. No reason is required to submit.
+5. **Database Updates & Governance**:
+   - On submission, the attendance document is updated with the new fields, plus `selfEdited: true` and `selfEditedAt: serverTimestamp()`.
+   - A corresponding audit log is written to `/auditLogs` with `action: "self-edit"` and `performedBy: currentUser.uid` for governance and misuse monitoring.
+6. **Security Rules Enforcement**:
+   - `firestore.rules` enforces that non-admin updates are blocked unless `resource.data.markedByUserId == request.auth.uid` AND `request.time < resource.data.createdAt + duration.value(10, 'm')` (matching the 10-minute server-side verification). Non-admin updates are strictly limited to the `checkIn`, `status`, `selfEdited`, and `selfEditedAt` fields.
+   - Non-admin creation of `auditLogs` is allowed only for `action == 'self-edit'` and where `performedBy == request.auth.uid`.
+
 ---
 
 ## 8. Design System & UX Notes
