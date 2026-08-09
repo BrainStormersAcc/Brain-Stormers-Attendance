@@ -37,7 +37,7 @@ function App() {
           <Route 
             index 
             element={
-              <ProtectedRoute>
+              <ProtectedRoute requiredRole="admin">
                 <DashboardHome view="overview" />
               </ProtectedRoute>
             } 
@@ -53,7 +53,7 @@ function App() {
           <Route 
             path="attendance-records" 
             element={
-              <ProtectedRoute>
+              <ProtectedRoute requiredRole="admin">
                 <DashboardHome view="records" />
               </ProtectedRoute>
             } 
@@ -69,7 +69,7 @@ function App() {
           <Route 
             path="audit-log" 
             element={
-              <ProtectedRoute>
+              <ProtectedRoute requiredRole="admin">
                 <AuditLog />
               </ProtectedRoute>
             } 

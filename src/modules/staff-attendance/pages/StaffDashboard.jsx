@@ -206,7 +206,7 @@ export default function StaffDashboard() {
     setDataLoading(true);
     setDataError('');
     try {
-      if (userProfile.role === 'admin' || userProfile.role === 'staff') {
+      if (userProfile.role === 'admin') {
         // 1. Fetch active staff list
         const staffList = await getAllStaff();
         const activeStaff = staffList.filter(s => s.active);

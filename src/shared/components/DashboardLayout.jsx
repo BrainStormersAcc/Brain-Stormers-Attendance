@@ -166,11 +166,11 @@ function DashboardLayout() {
   const isStaff = userProfile?.role === 'staff';
 
   const navItems = [
-    (isStaff || isAdmin) && { name: 'Overview', path: '/', icon: LayoutDashboard },
+    isAdmin && { name: 'Overview', path: '/', icon: LayoutDashboard },
     isAdmin && { name: 'Staff Account Management', path: '/staff-management', icon: Users },
-    (isStaff || isAdmin) && { name: 'Attendance Records', path: '/attendance-records', icon: Clock },
+    isAdmin && { name: 'Attendance Records', path: '/attendance-records', icon: Clock },
     isAdmin && { name: 'Admin Settings', path: '/admin-settings', icon: Settings },
-    (isStaff || isAdmin) && { name: 'Audit Log', path: '/audit-log', icon: ClipboardList },
+    isAdmin && { name: 'Audit Log', path: '/audit-log', icon: ClipboardList },
     (isStaff || isAdmin) && { name: 'Staff Attendance', path: '/staff-attendance', icon: Clock },
     { name: 'Student Portal (Under Development)', path: '#', icon: GraduationCap, underConstruction: true },
     { name: 'Teacher Portal (Under Development)', path: '#', icon: Users, underConstruction: true },
@@ -473,6 +473,20 @@ function DashboardLayout() {
                   <p style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {userProfile?.name || 'User Account'}
                   </p>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
+                    <span style={{ 
+                      fontSize: '0.7rem', 
+                      fontWeight: 700, 
+                      color: userProfile?.role === 'admin' ? 'var(--color-accent)' : 'var(--color-success)', 
+                      textTransform: 'uppercase',
+                      padding: '2px 6px',
+                      borderRadius: '4px',
+                      backgroundColor: userProfile?.role === 'admin' ? 'var(--color-accent-glow)' : 'var(--color-success-glow)',
+                      border: `1px solid ${userProfile?.role === 'admin' ? 'var(--color-accent-glow)' : 'var(--color-success-glass-border)'}`
+                    }}>
+                      {userProfile?.role === 'admin' ? 'Admin' : 'Staff'}
+                    </span>
+                  </div>
                   <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {userProfile?.username || currentUser?.email || ''}
                   </p>
@@ -480,34 +494,32 @@ function DashboardLayout() {
 
                  {/* Operations links */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {isAdmin && (
-                    <button 
-                      onClick={() => {
-                        setDropdownOpen(false);
-                        setIsPassModalOpen(true);
-                      }}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '8px',
-                        color: 'var(--text-secondary)',
-                        fontSize: '0.875rem',
-                        background: 'none',
-                        border: 'none',
-                        cursor: 'pointer',
-                        padding: '6px 0',
-                        width: '100%',
-                        textAlign: 'left',
-                        fontFamily: 'var(--font-sans)',
-                        transition: 'color var(--transition-fast)'
-                      }}
-                      onMouseOver={(e) => e.currentTarget.style.color = 'var(--text-primary)'}
-                      onMouseOut={(e) => e.currentTarget.style.color = 'var(--text-secondary)'}
-                    >
-                      <Lock size={16} />
-                      <span>Change Password</span>
-                    </button>
-                  )}
+                  <button 
+                    onClick={() => {
+                      setDropdownOpen(false);
+                      setIsPassModalOpen(true);
+                    }}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      color: 'var(--text-secondary)',
+                      fontSize: '0.875rem',
+                      background: 'none',
+                      border: 'none',
+                      cursor: 'pointer',
+                      padding: '6px 0',
+                      width: '100%',
+                      textAlign: 'left',
+                      fontFamily: 'var(--font-sans)',
+                      transition: 'color var(--transition-fast)'
+                    }}
+                    onMouseOver={(e) => e.currentTarget.style.color = 'var(--text-primary)'}
+                    onMouseOut={(e) => e.currentTarget.style.color = 'var(--text-secondary)'}
+                  >
+                    <Lock size={16} />
+                    <span>Account Settings</span>
+                  </button>
 
                   <button 
                     onClick={() => {
@@ -561,7 +573,7 @@ function DashboardLayout() {
                     onMouseOut={(e) => e.currentTarget.style.color = 'var(--text-secondary)'}
                   >
                     <LogOut size={16} />
-                    <span>Sign Out</span>
+                    <span>Log Out</span>
                   </button>
                 </div>
               </div>
