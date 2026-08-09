@@ -17,7 +17,8 @@ import {
   Eye,
   EyeOff,
   ChevronDown,
-  Settings
+  Settings,
+  TrendingUp
 } from 'lucide-react';
 import NeuSegmentedControl from '../shared/components/NeuSegmentedControl.jsx';
 import NeuCard from '../shared/components/NeuCard.jsx';
@@ -36,6 +37,8 @@ import {
 } from '../services/adminService.js';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import Skeleton from '../shared/components/Skeleton.jsx';
+import { db } from '../config/firebase.js';
+import { collection, query, where, getDocs } from 'firebase/firestore';
 
 export default function DashboardHome(props) {
   const activeTab = props.view || 'overview';
@@ -44,7 +47,7 @@ export default function DashboardHome(props) {
   const [success, setSuccess] = useState('');
 
   // Admin settings states
-  const { userProfile, updateAdminProfile } = useAuth();
+  const { userProfile, currentUser, updateAdminProfile } = useAuth();
   const [adminName, setAdminName] = useState(userProfile?.name || '');
   const [adminUsername, setAdminUsername] = useState(userProfile?.username || '');
   const [adminPhone, setAdminPhone] = useState(userProfile?.phone || '');
@@ -124,15 +127,35 @@ export default function DashboardHome(props) {
 
   // Fetch initial data
   const fetchData = async () => {
+    if (!userProfile || !currentUser) return;
     setLoading(true);
     setError('');
     try {
-      const staff = await getAllStaff();
-      setStaffList(staff);
-      
-      const logs = await getAllAttendance();
-      setAttendanceLogs(logs);
-      setFilteredLogs(logs);
+      if (userProfile.role === 'admin') {
+        const staff = await getAllStaff();
+        setStaffList(staff);
+        
+        const logs = await getAllAttendance();
+        setAttendanceLogs(logs);
+        setFilteredLogs(logs);
+      } else {
+        // Staff user: Fetch only their own profile and logs
+        setStaffList([{ uid: currentUser.uid, name: userProfile.name, active: true, username: userProfile.username }]);
+        
+        const attendanceRef = collection(db, 'attendance');
+        const q = query(attendanceRef, where('userId', '==', currentUser.uid));
+        const querySnapshot = await getDocs(q);
+        
+        const logs = [];
+        querySnapshot.forEach(doc => {
+          const data = doc.data();
+          if (data.isDeleted !== true) {
+            logs.push({ id: doc.id, ...data });
+          }
+        });
+        setAttendanceLogs(logs);
+        setFilteredLogs(logs);
+      }
     } catch (err) {
       console.error('Error fetching dashboard data:', err);
       setError('Failed to fetch registry data from server.');
@@ -143,7 +166,7 @@ export default function DashboardHome(props) {
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [userProfile, currentUser]);
 
   // Filter Attendance Logs
   useEffect(() => {
@@ -329,6 +352,53 @@ export default function DashboardHome(props) {
     return log.date === today && log.status === 'present';
   }).length;
 
+  // Get elapsed working days in the current month up to today (excluding Fridays)
+  const getElapsedWorkingDays = () => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = today.getMonth();
+    let workingDays = 0;
+    for (let d = 1; d <= today.getDate(); d++) {
+      const date = new Date(year, month, d);
+      const dayOfWeek = date.getDay(); // 5 = Friday
+      if (dayOfWeek !== 5) {
+        workingDays++;
+      }
+    }
+    return workingDays;
+  };
+
+  const elapsedWorkingDays = getElapsedWorkingDays();
+
+  // Personal present days count in current month
+  const currentMonthStr = new Date().toISOString().substring(0, 7); // "YYYY-MM"
+  const myPresentCount = attendanceLogs.filter(log => 
+    log.userId === currentUser?.uid && 
+    log.date.startsWith(currentMonthStr) && 
+    (log.status === 'present' || log.status === 'late')
+  ).length;
+
+  const myLateCount = attendanceLogs.filter(log => 
+    log.userId === currentUser?.uid && 
+    log.date.startsWith(currentMonthStr) && 
+    log.status === 'late'
+  ).length;
+
+  const myAbsentCount = Math.max(0, elapsedWorkingDays - myPresentCount);
+
+  const myAttendancePct = elapsedWorkingDays > 0 
+    ? Math.min(100, Math.round((myPresentCount / elapsedWorkingDays) * 100)) 
+    : 0;
+
+  const todayStr = new Date().toISOString().split('T')[0];
+  const todayRecord = attendanceLogs.find(log => log.userId === currentUser?.uid && log.date === todayStr);
+  let myStatusToday = 'Not marked yet';
+  if (todayRecord) {
+    if (todayRecord.status === 'present') myStatusToday = 'Present';
+    else if (todayRecord.status === 'late') myStatusToday = 'Present (Late)';
+    else if (todayRecord.status === 'absent') myStatusToday = 'Absent';
+  }
+
   // Filtered staff list for registry search
   const filteredStaffList = staffList.filter(member => {
     const query = searchStaffQuery.toLowerCase().trim();
@@ -456,121 +526,223 @@ export default function DashboardHome(props) {
 
                 {/* Stats Cards Section */}
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '24px' }}>
-                  
-                  {/* Staff Card - Active */}
-                  <NeuCard variant="raised" style={{ padding: '24px', display: 'flex', gap: '20px', alignItems: 'center' }}>
-                    <div style={{
-                      width: '54px',
-                      height: '54px',
-                      borderRadius: 'var(--border-radius-md)',
-                      backgroundColor: 'var(--bg-surface-elevated)',
-                      boxShadow: 'var(--neu-shadow-pressed-sm)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      color: 'var(--color-primary)'
-                    }}>
-                      <Clock size={24} />
-                    </div>
-                    <div>
-                      <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Staff Present Today</p>
-                      <h3 style={{ fontSize: '1.75rem', fontWeight: 700 }}>
-                        {presentCount} / {activeStaffCount}
-                      </h3>
-                    </div>
-                  </NeuCard>
+                  {userProfile?.role === 'admin' ? (
+                    <>
+                      {/* Staff Card - Active */}
+                      <NeuCard variant="raised" style={{ padding: '24px', display: 'flex', gap: '20px', alignItems: 'center' }}>
+                        <div style={{
+                          width: '54px',
+                          height: '54px',
+                          borderRadius: 'var(--border-radius-md)',
+                          backgroundColor: 'var(--bg-surface-elevated)',
+                          boxShadow: 'var(--neu-shadow-pressed-sm)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: 'var(--color-primary)'
+                        }}>
+                          <Clock size={24} />
+                        </div>
+                        <div>
+                          <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Staff Present Today</p>
+                          <h3 style={{ fontSize: '1.75rem', fontWeight: 700 }}>
+                            {presentCount} / {activeStaffCount}
+                          </h3>
+                        </div>
+                      </NeuCard>
 
-                  {/* Student Card - Under Dev */}
-                  <NeuCard 
-                    variant="raised" 
-                    className="under-dev-card"
-                    style={{ padding: '24px', display: 'flex', gap: '20px', alignItems: 'center' }}
-                  >
-                    <div className="under-dev-overlay">
-                      <span className="under-dev-text">Under Development</span>
-                    </div>
-                    <div style={{
-                      width: '54px',
-                      height: '54px',
-                      borderRadius: 'var(--border-radius-md)',
-                      backgroundColor: 'var(--bg-surface-elevated)',
-                      boxShadow: 'var(--neu-shadow-pressed-sm)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      color: 'var(--color-accent)'
-                    }}>
-                      <GraduationCap size={24} />
-                    </div>
-                    <div>
-                      <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Students Checked In</p>
-                      <h3 style={{ fontSize: '1.75rem', fontWeight: 700 }}>0 / 0</h3>
-                    </div>
-                  </NeuCard>
+                      {/* Student Card - Under Dev */}
+                      <NeuCard 
+                        variant="raised" 
+                        className="under-dev-card"
+                        style={{ padding: '24px', display: 'flex', gap: '20px', alignItems: 'center' }}
+                      >
+                        <div className="under-dev-overlay">
+                          <span className="under-dev-text">Under Development</span>
+                        </div>
+                        <div style={{
+                          width: '54px',
+                          height: '54px',
+                          borderRadius: 'var(--border-radius-md)',
+                          backgroundColor: 'var(--bg-surface-elevated)',
+                          boxShadow: 'var(--neu-shadow-pressed-sm)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: 'var(--color-accent)'
+                        }}>
+                          <GraduationCap size={24} />
+                        </div>
+                        <div>
+                          <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Students Checked In</p>
+                          <h3 style={{ fontSize: '1.75rem', fontWeight: 700 }}>0 / 0</h3>
+                        </div>
+                      </NeuCard>
 
-                  {/* Classes Card - Under Dev */}
-                  <NeuCard 
-                    variant="raised" 
-                    className="under-dev-card"
-                    style={{ padding: '24px', display: 'flex', gap: '20px', alignItems: 'center' }}
-                  >
-                    <div className="under-dev-overlay">
-                      <span className="under-dev-text">Under Development</span>
-                    </div>
-                    <div style={{
-                      width: '54px',
-                      height: '54px',
-                      borderRadius: 'var(--border-radius-md)',
-                      backgroundColor: 'var(--bg-surface-elevated)',
-                      boxShadow: 'var(--neu-shadow-pressed-sm)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      color: 'var(--color-success)'
-                    }}>
-                      <Calendar size={24} />
-                    </div>
-                    <div>
-                      <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Active Classes</p>
-                      <h3 style={{ fontSize: '1.75rem', fontWeight: 700 }}>12 Classes</h3>
-                    </div>
-                  </NeuCard>
+                      {/* Classes Card - Under Dev */}
+                      <NeuCard 
+                        variant="raised" 
+                        className="under-dev-card"
+                        style={{ padding: '24px', display: 'flex', gap: '20px', alignItems: 'center' }}
+                      >
+                        <div className="under-dev-overlay">
+                          <span className="under-dev-text">Under Development</span>
+                        </div>
+                        <div style={{
+                          width: '54px',
+                          height: '54px',
+                          borderRadius: 'var(--border-radius-md)',
+                          backgroundColor: 'var(--bg-surface-elevated)',
+                          boxShadow: 'var(--neu-shadow-pressed-sm)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: 'var(--color-success)'
+                        }}>
+                          <Calendar size={24} />
+                        </div>
+                        <div>
+                          <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Active Classes</p>
+                          <h3 style={{ fontSize: '1.75rem', fontWeight: 700 }}>12 Classes</h3>
+                        </div>
+                      </NeuCard>
 
-                  {/* Teacher Card - Under Dev */}
-                  <NeuCard 
-                    variant="raised" 
-                    className="under-dev-card"
-                    style={{ padding: '24px', display: 'flex', gap: '20px', alignItems: 'center' }}
-                  >
-                    <div className="under-dev-overlay">
-                      <span className="under-dev-text">Under Development</span>
-                    </div>
-                    <div style={{
-                      width: '54px',
-                      height: '54px',
-                      borderRadius: 'var(--border-radius-md)',
-                      backgroundColor: 'var(--bg-surface-elevated)',
-                      boxShadow: 'var(--neu-shadow-pressed-sm)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      color: 'var(--color-warning)'
-                    }}>
-                      <Users size={24} />
-                    </div>
-                    <div>
-                      <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Teacher Checked in</p>
-                      <h3 style={{ fontSize: '1.75rem', fontWeight: 700 }}>0 / 0</h3>
-                    </div>
-                  </NeuCard>
+                      {/* Teacher Card - Under Dev */}
+                      <NeuCard 
+                        variant="raised" 
+                        className="under-dev-card"
+                        style={{ padding: '24px', display: 'flex', gap: '20px', alignItems: 'center' }}
+                      >
+                        <div className="under-dev-overlay">
+                          <span className="under-dev-text">Under Development</span>
+                        </div>
+                        <div style={{
+                          width: '54px',
+                          height: '54px',
+                          borderRadius: 'var(--border-radius-md)',
+                          backgroundColor: 'var(--bg-surface-elevated)',
+                          boxShadow: 'var(--neu-shadow-pressed-sm)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: 'var(--color-warning)'
+                        }}>
+                          <Users size={24} />
+                        </div>
+                        <div>
+                          <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Teacher Checked in</p>
+                          <h3 style={{ fontSize: '1.75rem', fontWeight: 700 }}>0 / 0</h3>
+                        </div>
+                      </NeuCard>
+                    </>
+                  ) : (
+                    <>
+                      {/* Personal Status Today Card */}
+                      <NeuCard variant="raised" style={{ padding: '24px', display: 'flex', gap: '20px', alignItems: 'center' }}>
+                        <div style={{
+                          width: '54px',
+                          height: '54px',
+                          borderRadius: 'var(--border-radius-md)',
+                          backgroundColor: 'var(--bg-surface-elevated)',
+                          boxShadow: 'var(--neu-shadow-pressed-sm)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: myStatusToday.startsWith('Present') ? 'var(--color-success)' : myStatusToday === 'Absent' ? 'var(--color-danger)' : 'var(--text-secondary)'
+                        }}>
+                          <Clock size={24} />
+                        </div>
+                        <div>
+                          <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Your Status Today</p>
+                          <h3 style={{ fontSize: '1.5rem', fontWeight: 700, color: myStatusToday.startsWith('Present') ? 'var(--color-success)' : myStatusToday === 'Absent' ? 'var(--color-danger)' : 'var(--text-primary)' }}>
+                            {myStatusToday}
+                          </h3>
+                        </div>
+                      </NeuCard>
 
+                      {/* Personal Attendance Rate Card */}
+                      <NeuCard variant="raised" style={{ padding: '24px', display: 'flex', gap: '20px', alignItems: 'center' }}>
+                        <div style={{
+                          width: '54px',
+                          height: '54px',
+                          borderRadius: 'var(--border-radius-md)',
+                          backgroundColor: 'var(--bg-surface-elevated)',
+                          boxShadow: 'var(--neu-shadow-pressed-sm)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: 'var(--color-primary)'
+                        }}>
+                          <TrendingUp size={24} />
+                        </div>
+                        <div>
+                          <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Attendance Rate (Month)</p>
+                          <h3 style={{ fontSize: '1.75rem', fontWeight: 700, color: myAttendancePct >= 90 ? 'var(--color-success)' : myAttendancePct >= 75 ? 'var(--color-warning)' : 'var(--color-danger)' }}>
+                            {myAttendancePct}%
+                          </h3>
+                        </div>
+                      </NeuCard>
+
+                      {/* Personal Present Days Card */}
+                      <NeuCard variant="raised" style={{ padding: '24px', display: 'flex', gap: '20px', alignItems: 'center' }}>
+                        <div style={{
+                          width: '54px',
+                          height: '54px',
+                          borderRadius: 'var(--border-radius-md)',
+                          backgroundColor: 'var(--bg-surface-elevated)',
+                          boxShadow: 'var(--neu-shadow-pressed-sm)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: 'var(--color-success)'
+                        }}>
+                          <CheckCircle2 size={24} />
+                        </div>
+                        <div>
+                          <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Days Present (Month)</p>
+                          <h3 style={{ fontSize: '1.75rem', fontWeight: 700 }}>
+                            {myPresentCount} Days
+                          </h3>
+                        </div>
+                      </NeuCard>
+
+                      {/* Personal Absent/Late Days Card */}
+                      <NeuCard variant="raised" style={{ padding: '24px', display: 'flex', gap: '20px', alignItems: 'center' }}>
+                        <div style={{
+                          width: '54px',
+                          height: '54px',
+                          borderRadius: 'var(--border-radius-md)',
+                          backgroundColor: 'var(--bg-surface-elevated)',
+                          boxShadow: 'var(--neu-shadow-pressed-sm)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: 'var(--color-warning)'
+                        }}>
+                          <Calendar size={24} />
+                        </div>
+                        <div>
+                          <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Days Late / Absent</p>
+                          <h3 style={{ fontSize: '1.75rem', fontWeight: 700 }}>
+                            {myLateCount} L / {myAbsentCount} A
+                          </h3>
+                        </div>
+                      </NeuCard>
+                    </>
+                  )}
                 </div>
 
             {/* Quick Access Block */}
             <NeuCard variant="raised" style={{ padding: '32px' }}>
-              <h3 style={{ fontSize: '1.25rem', marginBottom: '12px', fontFamily: 'var(--font-display)' }}>System Instructions</h3>
+              <h3 style={{ fontSize: '1.25rem', marginBottom: '12px', fontFamily: 'var(--font-display)' }}>
+                {userProfile?.role === 'admin' ? 'System Instructions' : 'Personal Dashboard Guide'}
+              </h3>
               <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', maxWidth: '800px', lineHeight: '1.6' }}>
-                This is your administrative console. Click **Staff Account Management** to add, edit, or delete staff credentials (usernames and passwords). Switch to **Attendance Records** to filter and inspect logged times.
+                {userProfile?.role === 'admin' ? (
+                  <>This is your administrative console. Click **Staff Account Management** to add, edit, or delete staff credentials (usernames and passwords). Switch to **Attendance Records** to filter and inspect logged times.</>
+                ) : (
+                  <>Welcome to your personal dashboard. You can view your current attendance metrics above. Click on **Attendance Records** in the sidebar to review your personal logged times in detail, or select **Staff Attendance** to mark your check-ins or view your calendar.</>
+                )}
               </p>
             </NeuCard>
           </div>
@@ -917,48 +1089,50 @@ export default function DashboardHome(props) {
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px' }}>
                     
                     {/* Staff Filter Dropdown */}
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                      <label className="neu-input-label">Staff Member</label>
-                      <div style={{ position: 'relative', width: '100%' }}>
-                        <select 
-                          value={filterStaff}
-                          onChange={(e) => setFilterStaff(e.target.value)}
-                          style={{
-                            width: '100%',
-                            padding: '12px 36px 12px 16px',
-                            background: 'var(--bg-surface)',
-                            color: 'var(--text-primary)',
-                            border: '1px solid var(--border-color)',
-                            borderRadius: 'var(--border-radius-sm)',
-                            boxShadow: 'var(--neu-shadow-pressed-sm)',
-                            fontFamily: 'var(--font-sans)',
-                            fontSize: '0.95rem',
-                            outline: 'none',
-                            transition: 'border-color var(--transition-normal)',
-                            appearance: 'none',
-                            WebkitAppearance: 'none',
-                            MozAppearance: 'none'
-                          }}
-                        >
-                          <option value="">All Staff</option>
-                          {staffList.map(s => (
-                            <option key={s.uid} value={s.uid}>{s.name}</option>
-                          ))}
-                        </select>
-                        <div style={{
-                          position: 'absolute',
-                          right: '16px',
-                          top: '50%',
-                          transform: 'translateY(-50%)',
-                          display: 'flex',
-                          alignItems: 'center',
-                          pointerEvents: 'none',
-                          color: 'var(--text-secondary)'
-                        }}>
-                          <ChevronDown size={16} />
+                    {userProfile?.role === 'admin' && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        <label className="neu-input-label">Staff Member</label>
+                        <div style={{ position: 'relative', width: '100%' }}>
+                          <select 
+                            value={filterStaff}
+                            onChange={(e) => setFilterStaff(e.target.value)}
+                            style={{
+                              width: '100%',
+                              padding: '12px 36px 12px 16px',
+                              background: 'var(--bg-surface)',
+                              color: 'var(--text-primary)',
+                              border: '1px solid var(--border-color)',
+                              borderRadius: 'var(--border-radius-sm)',
+                              boxShadow: 'var(--neu-shadow-pressed-sm)',
+                              fontFamily: 'var(--font-sans)',
+                              fontSize: '0.95rem',
+                              outline: 'none',
+                              transition: 'border-color var(--transition-normal)',
+                              appearance: 'none',
+                              WebkitAppearance: 'none',
+                              MozAppearance: 'none'
+                            }}
+                          >
+                            <option value="">All Staff</option>
+                            {staffList.map(s => (
+                              <option key={s.uid} value={s.uid}>{s.name}</option>
+                            ))}
+                          </select>
+                          <div style={{
+                            position: 'absolute',
+                            right: '16px',
+                            top: '50%',
+                            transform: 'translateY(-50%)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            pointerEvents: 'none',
+                            color: 'var(--text-secondary)'
+                          }}>
+                            <ChevronDown size={16} />
+                          </div>
                         </div>
                       </div>
-                    </div>
+                    )}
 
                     {/* Start Date */}
                     <NeuDatePicker

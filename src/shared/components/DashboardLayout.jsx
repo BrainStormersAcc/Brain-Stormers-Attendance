@@ -166,9 +166,9 @@ function DashboardLayout() {
   const isStaff = userProfile?.role === 'staff';
 
   const navItems = [
-    isAdmin && { name: 'Overview', path: '/', icon: LayoutDashboard },
+    (isStaff || isAdmin) && { name: 'Overview', path: '/', icon: LayoutDashboard },
     isAdmin && { name: 'Staff Account Management', path: '/staff-management', icon: Users },
-    isAdmin && { name: 'Attendance Records', path: '/attendance-records', icon: Clock },
+    (isStaff || isAdmin) && { name: 'Attendance Records', path: '/attendance-records', icon: Clock },
     isAdmin && { name: 'Admin Settings', path: '/admin-settings', icon: Settings },
     isAdmin && { name: 'Audit Log', path: '/audit-log', icon: ClipboardList },
     (isStaff || isAdmin) && { name: 'Staff Attendance', path: '/staff-attendance', icon: Clock },

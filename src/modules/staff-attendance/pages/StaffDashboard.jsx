@@ -206,20 +206,31 @@ export default function StaffDashboard() {
     setDataLoading(true);
     setDataError('');
     try {
-      if (userProfile.role === 'admin') {
-        // 1. Fetch active staff list
+      // 1. Fetch active staff list for both roles with graceful fallback
+      let activeStaff = [];
+      try {
         const staffList = await getAllStaff();
-        const activeStaff = staffList.filter(s => s.active);
-        setRawStaffList(activeStaff);
+        activeStaff = staffList.filter(s => s.active);
+      } catch (err) {
+        console.warn('Could not fetch all staff profiles, falling back to current user:', err);
+        activeStaff = [{
+          uid: currentUser.uid,
+          name: userProfile?.name || 'Staff User',
+          username: userProfile?.username || '',
+          active: true
+        }];
+      }
+      setRawStaffList(activeStaff);
 
-        // Build Name lookup map
-        const nameMap = {};
-        activeStaff.forEach(s => {
-          nameMap[s.uid] = s.name;
-        });
-        setStaffNameMap(nameMap);
+      // Build Name lookup map
+      const nameMap = {};
+      activeStaff.forEach(s => {
+        nameMap[s.uid] = s.name;
+      });
+      setStaffNameMap(nameMap);
 
-        // 2. Fetch all attendance logs
+      // 2. Fetch logs based on role
+      if (userProfile.role === 'admin') {
         const allLogs = await getAllAttendance();
         const staffLogs = allLogs.filter(log => log.role === 'staff');
         setRawLogs(staffLogs);
@@ -257,13 +268,22 @@ export default function StaffDashboard() {
   const handleOpenManualRecordModal = () => {
     setManualModalMode('create');
     setEditingRecord(null);
-    setManualStaff(null);
+    
+    // Auto-select the logged-in user if their profile exists in the staff list
+    const myProfile = rawStaffList.find(s => s.uid === currentUser?.uid);
+    if (myProfile) {
+      setManualStaff({ uid: myProfile.uid, name: myProfile.name, username: myProfile.username || '' });
+      setManualStaffSearch(myProfile.name);
+    } else {
+      setManualStaff(null);
+      setManualStaffSearch('');
+    }
+
     setManualDate(getTodayDateString());
     setManualCheckIn('');
     setManualCheckOut('');
     setManualStatus('present');
     setManualReason('');
-    setManualStaffSearch('');
     setManualError('');
     setManualSuccess(false);
     setIsManualRecordModalOpen(true);
@@ -337,8 +357,8 @@ export default function StaffDashboard() {
         setManualSubmitting(false);
         return;
       }
-      if (!manualReason || manualReason.trim().length < 10) {
-        setManualError('Reason must be at least 10 characters long.');
+      if (!manualReason || !manualReason.trim()) {
+        setManualError('Please provide a reason / justification.');
         setManualSubmitting(false);
         return;
       }
@@ -357,103 +377,131 @@ export default function StaffDashboard() {
       // 3. Firestore Batch Write Transaction
       const batch = writeBatch(db);
 
-      if (manualModalMode === 'edit' && editingRecord) {
-        // A. Setup attendance document reference for update
-        const attendanceRef = doc(db, 'attendance', editingRecord.id);
+      if (userProfile?.role === 'admin') {
+        if (manualModalMode === 'edit' && editingRecord) {
+          // A. Setup attendance document reference for update
+          const attendanceRef = doc(db, 'attendance', editingRecord.id);
 
-        const updatedFields = {
-          checkIn: checkInDate,
-          checkOut: checkOutDate || null,
-          status: manualStatus,
-          lastEditedBy: currentUser.uid,
-          lastEditedAt: serverTimestamp()
-        };
+          const updatedFields = {
+            checkIn: checkInDate,
+            checkOut: checkOutDate || null,
+            status: manualStatus,
+            lastEditedBy: currentUser.uid,
+            lastEditedAt: serverTimestamp()
+          };
 
-        batch.update(attendanceRef, updatedFields);
+          batch.update(attendanceRef, updatedFields);
 
-        // Capture snapshot before changes
-        const previousData = {
-          userId: editingRecord.userId,
-          role: editingRecord.role,
-          date: editingRecord.date,
-          checkIn: editingRecord.checkIn,
-          checkOut: editingRecord.checkOut || null,
-          status: editingRecord.status,
-          markedBy: editingRecord.markedBy,
-          isDeleted: editingRecord.isDeleted || false,
-          ...(editingRecord.lastEditedBy ? { lastEditedBy: editingRecord.lastEditedBy } : {}),
-          ...(editingRecord.lastEditedAt ? { lastEditedAt: editingRecord.lastEditedAt } : {})
-        };
+          // Capture snapshot before changes
+          const previousData = {
+            userId: editingRecord.userId,
+            role: editingRecord.role,
+            date: editingRecord.date,
+            checkIn: editingRecord.checkIn,
+            checkOut: editingRecord.checkOut || null,
+            status: editingRecord.status,
+            markedBy: editingRecord.markedBy,
+            isDeleted: editingRecord.isDeleted || false,
+            ...(editingRecord.lastEditedBy ? { lastEditedBy: editingRecord.lastEditedBy } : {}),
+            ...(editingRecord.lastEditedAt ? { lastEditedAt: editingRecord.lastEditedAt } : {})
+          };
 
-        const newData = {
-          ...previousData,
-          checkIn: checkInDate,
-          checkOut: checkOutDate || null,
-          status: manualStatus,
-          lastEditedBy: currentUser.uid,
-          lastEditedAt: serverTimestamp()
-        };
+          const newData = {
+            ...previousData,
+            checkIn: checkInDate,
+            checkOut: checkOutDate || null,
+            status: manualStatus,
+            lastEditedBy: currentUser.uid,
+            lastEditedAt: serverTimestamp()
+          };
 
-        // B. Setup auditLog document for update action
-        const auditLogRef = doc(collection(db, 'auditLogs'));
-        const auditLogData = {
-          action: 'update',
-          targetCollection: 'attendance',
-          targetDocId: editingRecord.id,
-          performedBy: currentUser.uid,
-          performedByName: userProfile?.name || 'Admin',
-          timestamp: serverTimestamp(),
-          reason: manualReason.trim(),
-          previousData: previousData,
-          newData: newData
-        };
+          // B. Setup auditLog document for update action
+          const auditLogRef = doc(collection(db, 'auditLogs'));
+          const auditLogData = {
+            action: 'update',
+            targetCollection: 'attendance',
+            targetDocId: editingRecord.id,
+            performedBy: currentUser.uid,
+            performedByName: userProfile?.name || 'Admin',
+            timestamp: serverTimestamp(),
+            reason: manualReason.trim(),
+            previousData: previousData,
+            newData: newData
+          };
 
-        batch.set(auditLogRef, auditLogData);
+          batch.set(auditLogRef, auditLogData);
 
+        } else {
+          // CREATE Mode (Admin)
+          // Prevent duplicate entries
+          const duplicate = rawLogs.find(
+            log => log.userId === manualStaff.uid && log.date === manualDate && log.isDeleted !== true
+          );
+          if (duplicate) {
+            setManualError('An active attendance record already exists for this staff member on this date. Please EDIT the existing record instead.');
+            setManualSubmitting(false);
+            return;
+          }
+
+          // A. Setup attendance document for creation
+          const attendanceRef = doc(collection(db, 'attendance'));
+          const attendanceId = attendanceRef.id;
+
+          const newAttendanceData = {
+            userId: manualStaff.uid,
+            role: 'staff',
+            date: manualDate,
+            checkIn: checkInDate,
+            checkOut: checkOutDate || null,
+            status: manualStatus,
+            markedBy: 'admin-manual',
+            isDeleted: false
+          };
+
+          batch.set(attendanceRef, newAttendanceData);
+
+          // B. Setup auditLog document for create action
+          const auditLogRef = doc(collection(db, 'auditLogs'));
+          const auditLogData = {
+            action: 'create',
+            targetCollection: 'attendance',
+            targetDocId: attendanceId,
+            performedBy: currentUser.uid,
+            performedByName: userProfile?.name || 'Admin',
+            timestamp: serverTimestamp(),
+            reason: manualReason.trim(),
+            previousData: null,
+            newData: newAttendanceData
+          };
+
+          batch.set(auditLogRef, auditLogData);
+        }
       } else {
-        // CREATE Mode
-        // Prevent duplicate entries
+        // CREATE Mode (Staff - Logging own attendance)
         const duplicate = rawLogs.find(
-          log => log.userId === manualStaff.uid && log.date === manualDate && log.isDeleted !== true
+          log => log.userId === currentUser.uid && log.date === manualDate && log.isDeleted !== true
         );
         if (duplicate) {
-          setManualError('An active attendance record already exists for this staff member on this date. Please EDIT the existing record instead.');
+          setManualError('An active attendance record already exists for you on this date.');
           setManualSubmitting(false);
           return;
         }
 
         // A. Setup attendance document for creation
         const attendanceRef = doc(collection(db, 'attendance'));
-        const attendanceId = attendanceRef.id;
-
         const newAttendanceData = {
-          userId: manualStaff.uid,
+          userId: currentUser.uid,
           role: 'staff',
           date: manualDate,
           checkIn: checkInDate,
           checkOut: checkOutDate || null,
           status: manualStatus,
-          markedBy: 'admin-manual',
+          markedBy: 'self-checkin',
           isDeleted: false
         };
 
         batch.set(attendanceRef, newAttendanceData);
-
-        // B. Setup auditLog document for create action
-        const auditLogRef = doc(collection(db, 'auditLogs'));
-        const auditLogData = {
-          action: 'create',
-          targetCollection: 'attendance',
-          targetDocId: attendanceId,
-          performedBy: currentUser.uid,
-          performedByName: userProfile?.name || 'Admin',
-          timestamp: serverTimestamp(),
-          reason: manualReason.trim(),
-          previousData: null,
-          newData: newAttendanceData
-        };
-
-        batch.set(auditLogRef, auditLogData);
+        // Do NOT write to auditLogs (since non-admins are blocked from auditLogs collection)
       }
 
       // Commit transaction batch
@@ -493,8 +541,8 @@ export default function StaffDashboard() {
     setDeleteSubmitting(true);
 
     try {
-      if (!deleteReason || deleteReason.trim().length < 10) {
-        setDeleteError('Reason must be at least 10 characters long.');
+      if (!deleteReason || !deleteReason.trim()) {
+        setDeleteError('Please provide a reason / justification.');
         setDeleteSubmitting(false);
         return;
       }
@@ -722,7 +770,12 @@ export default function StaffDashboard() {
 
   // Filter searchable active staff members for manual adjustments modal
   const activeStaffList = rawStaffList.filter(s => s.active);
-  const matchedStaff = activeStaffList.filter(s => 
+  const sortedStaffList = [...activeStaffList].sort((a, b) => {
+    if (a.uid === currentUser?.uid) return -1;
+    if (b.uid === currentUser?.uid) return 1;
+    return 0;
+  });
+  const matchedStaff = sortedStaffList.filter(s => 
     s.name.toLowerCase().includes(manualStaffSearch.toLowerCase()) ||
     s.username.toLowerCase().includes(manualStaffSearch.toLowerCase())
   );
@@ -3618,7 +3671,6 @@ export default function StaffDashboard() {
                       boxSizing: 'border-box'
                     }}
                     required
-                    minLength={10}
                     disabled={manualSubmitting}
                   />
                 </div>
@@ -3808,7 +3860,6 @@ export default function StaffDashboard() {
                       boxSizing: 'border-box'
                     }}
                     required
-                    minLength={10}
                     disabled={deleteSubmitting}
                   />
                 </div>
