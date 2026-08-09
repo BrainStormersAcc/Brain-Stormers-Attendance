@@ -15,7 +15,8 @@ import {
   Smile,
   Check,
   RefreshCw,
-  ClipboardList
+  ClipboardList,
+  ShieldAlert
 } from 'lucide-react';
 import NeuThemeToggle from './NeuThemeToggle';
 import { useAuth } from '../../contexts/AuthContext.jsx';
@@ -171,6 +172,7 @@ function DashboardLayout() {
     (isStaff || isAdmin) && { name: 'Attendance Records', path: '/attendance-records', icon: Clock },
     isAdmin && { name: 'Admin Settings', path: '/admin-settings', icon: Settings },
     isAdmin && { name: 'Audit Log', path: '/audit-log', icon: ClipboardList },
+    isAdmin && { name: 'Misuse Monitoring', path: '/misuse-monitoring', icon: ShieldAlert },
     (isStaff || isAdmin) && { name: 'Staff Attendance', path: '/staff-attendance', icon: Clock },
     { name: 'Student Portal (Under Development)', path: '#', icon: GraduationCap, underConstruction: true },
     { name: 'Teacher Portal (Under Development)', path: '#', icon: Users, underConstruction: true },
@@ -200,6 +202,7 @@ function DashboardLayout() {
       else if (segment === 'attendance-records') name = 'Attendance Records';
       else if (segment === 'admin-settings') name = 'Admin Settings';
       else if (segment === 'audit-log') name = 'Audit Log';
+      else if (segment === 'misuse-monitoring') name = 'Misuse Monitoring';
       else if (segment === 'staff-attendance') name = 'Staff Attendance';
       else if (segment === 'logs') name = 'Logs';
       else {

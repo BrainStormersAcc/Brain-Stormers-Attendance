@@ -57,7 +57,7 @@ service cloud.firestore {
     match /attendance/{attendanceId} {
       allow create: if isSignedIn() && (
         (isAdmin() && request.resource.data.markedBy in ["fingerprint", "self-checkin", "admin-manual"]) || (
-          request.resource.data.userId == request.auth.uid &&
+          request.resource.data.markedByUserId == request.auth.uid &&
           request.resource.data.markedBy in ["fingerprint", "self-checkin"] &&
           !(request.resource.data.keys().hasAny(['lastEditedBy', 'lastEditedAt'])) &&
           (!request.resource.data.keys().hasAll(['isDeleted']) || request.resource.data.isDeleted == false)
@@ -74,7 +74,7 @@ service cloud.firestore {
           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['checkIn', 'status', 'selfEdited', 'selfEditedAt'])
         )
       );
-      allow delete: if false;
+      allow delete: if isAdmin();
     }
 
     // Rules for auditLogs collection
@@ -82,10 +82,11 @@ service cloud.firestore {
       allow read: if isAdmin();
       allow create: if isAdmin() || (
         isSignedIn() &&
-        request.resource.data.action == 'self-edit' &&
+        request.resource.data.action in ['create', 'self-edit'] &&
         request.resource.data.performedBy == request.auth.uid
       );
-      allow update, delete: if false;
+      allow update: if false;
+      allow delete: if isAdmin();
     }
   }
 }

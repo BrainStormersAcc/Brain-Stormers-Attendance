@@ -208,7 +208,18 @@ To allow staff members to quickly correct honest entry mistakes (e.g., choosing 
    - A corresponding audit log is written to `/auditLogs` with `action: "self-edit"` and `performedBy: currentUser.uid` for governance and misuse monitoring.
 6. **Security Rules Enforcement**:
    - `firestore.rules` enforces that non-admin updates are blocked unless `resource.data.markedByUserId == request.auth.uid` AND `request.time < resource.data.createdAt + duration.value(10, 'm')` (matching the 10-minute server-side verification). Non-admin updates are strictly limited to the `checkIn`, `status`, `selfEdited`, and `selfEditedAt` fields.
-   - Non-admin creation of `auditLogs` is allowed only for `action == 'self-edit'` and where `performedBy == request.auth.uid`.
+   - Non-admin creation of `auditLogs` is allowed for `action` in `['create', 'self-edit']` and where `performedBy == request.auth.uid` (supporting audit logging of staff peer-marking and self-correction creations).
+
+### E. Misuse Monitoring Dashboard (Governance & Compliance)
+To prevent collusive check-in behaviors or self-correction window gaming since Staff can self-create and self-edit entries without Admin pre-approval:
+1. **Access Gating**: Restricted exclusively to users with the `"admin"` role, protected by frontend route-guards and backend Firestore rules. Linked in the sidebar nav near "Audit Log".
+2. **Analysis Calculations (Client-Side)**:
+   - **Frequent Peer-Markers**: Groups audit logs with `action: "create"` where `performedBy != newData.userId`. Ranks creators highest-to-lowest based on how many logs they logged for colleagues.
+   - **Self-Edits Frequency**: Groups audit logs with `action: "self-edit"` and ranks users by their self-correction frequency in the selected date range.
+   - **Same-Person Repeated Peer-Marking**: Groups peer-marked creations by the specific pair `(performedBy, newData.userId)`. Flags collusions where Staff A repeatedly marks Staff B (visually highlighting cases exceeding 3 repeats).
+   - **Edits Right Before Window Expiry**: Scans `self-edit` logs and flags adjustments completed in the final 60 seconds (remaining seconds < 60s) of the 10-minute correction window.
+3. **Interactive Drilldown**: Each flagged list item or row is expandable. Clicking it lists all related audit logs. Each log in the list can be further expanded to show the side-by-side values difference comparison comparison table.
+4. **Date Filtering**: Includes a top-level Date Range filter (defaulting to the last 30 days) that instantly recalculates all metrics and lists client-side.
 
 ---
 

@@ -230,3 +230,32 @@ export const getAllAuditLogs = async () => {
     throw error;
   }
 };
+
+// Purge all attendance records and audit logs to reset system (Admin-only)
+export const purgeAllAttendanceData = async () => {
+  try {
+    // 1. Fetch all attendance docs
+    const attendanceRef = collection(db, 'attendance');
+    const attendanceSnapshot = await getDocs(attendanceRef);
+    
+    // 2. Fetch all audit logs
+    const auditLogsRef = collection(db, 'auditLogs');
+    const auditLogsSnapshot = await getDocs(auditLogsRef);
+    
+    const deletePromises = [];
+    
+    attendanceSnapshot.forEach((document) => {
+      deletePromises.push(deleteDoc(doc(db, 'attendance', document.id)));
+    });
+    
+    auditLogsSnapshot.forEach((document) => {
+      deletePromises.push(deleteDoc(doc(db, 'auditLogs', document.id)));
+    });
+    
+    await Promise.all(deletePromises);
+    return true;
+  } catch (error) {
+    console.error('Error in purgeAllAttendanceData:', error);
+    throw error;
+  }
+};

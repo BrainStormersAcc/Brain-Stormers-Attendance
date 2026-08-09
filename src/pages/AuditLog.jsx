@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   ClipboardList, 
   Filter, 
@@ -12,13 +12,15 @@ import {
   ChevronLeft, 
   ChevronRight,
   RefreshCw,
-  Settings
+  Settings,
+  X
 } from 'lucide-react';
 import NeuCard from '../shared/components/NeuCard.jsx';
 import NeuButton from '../shared/components/NeuButton.jsx';
 import NeuDatePicker from '../shared/components/NeuDatePicker.jsx';
 import NeuBadge from '../shared/components/NeuBadge.jsx';
 import NeuSegmentedControl from '../shared/components/NeuSegmentedControl.jsx';
+import NeuInput from '../shared/components/NeuInput.jsx';
 import { getAllStaff, getAllAuditLogs } from '../services/adminService.js';
 import Skeleton from '../shared/components/Skeleton.jsx';
 
@@ -35,6 +37,38 @@ export default function AuditLog() {
   const [filterAction, setFilterAction] = useState('');
   const [dateStart, setDateStart] = useState('');
   const [dateEnd, setDateEnd] = useState('');
+
+  // Searchable Staff Dropdown States
+  const [staffSearchQuery, setStaffSearchQuery] = useState('');
+  const [isStaffDropdownOpen, setIsStaffDropdownOpen] = useState(false);
+  const staffDropdownRef = useRef(null);
+
+  // Click outside listener for searchable dropdown
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (staffDropdownRef.current && !staffDropdownRef.current.contains(e.target)) {
+        setIsStaffDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const handleSelectStaff = (staff) => {
+    if (staff) {
+      setFilterStaff(staff.uid);
+      setStaffSearchQuery(staff.name);
+    } else {
+      setFilterStaff('');
+      setStaffSearchQuery('');
+    }
+    setIsStaffDropdownOpen(false);
+  };
+
+  const matchedStaff = staffList.filter(s => 
+    s.name.toLowerCase().includes(staffSearchQuery.toLowerCase()) || 
+    (s.username && s.username.toLowerCase().includes(staffSearchQuery.toLowerCase()))
+  );
 
   // Expandable row state
   const [expandedLogId, setExpandedLogId] = useState(null);
@@ -217,7 +251,7 @@ export default function AuditLog() {
               {fields.map(field => {
                 const beforeVal = getFieldVal(previousData, field);
                 const afterVal = getFieldVal(newData, field);
-                const hasChanged = action === 'update' && beforeVal !== afterVal;
+                const hasChanged = (action === 'update' || action === 'self-edit') && beforeVal !== afterVal;
                 
                 const rowBg = hasChanged ? 'rgba(var(--color-primary-rgb, 99, 102, 241), 0.04)' : 'transparent';
                 
@@ -433,44 +467,102 @@ export default function AuditLog() {
               {/* Affected Staff Filter */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 <label className="neu-input-label">Affected Staff Member</label>
-                <div style={{ position: 'relative', width: '100%' }}>
-                  <select 
-                    value={filterStaff}
-                    onChange={(e) => setFilterStaff(e.target.value)}
-                    style={{
-                      width: '100%',
-                      padding: '12px 36px 12px 16px',
-                      background: 'var(--bg-surface)',
-                      color: 'var(--text-primary)',
-                      border: '1px solid var(--border-color)',
-                      borderRadius: 'var(--border-radius-sm)',
-                      boxShadow: 'var(--neu-shadow-pressed-sm)',
-                      fontFamily: 'var(--font-sans)',
-                      fontSize: '0.95rem',
-                      outline: 'none',
-                      transition: 'border-color var(--transition-normal)',
-                      appearance: 'none',
-                      WebkitAppearance: 'none',
-                      MozAppearance: 'none'
+                <div ref={staffDropdownRef} style={{ position: 'relative', width: '100%' }}>
+                  <NeuInput
+                    type="text"
+                    placeholder="Search staff member..."
+                    value={staffSearchQuery}
+                    onChange={(e) => {
+                      if (filterStaff) setFilterStaff('');
+                      setStaffSearchQuery(e.target.value);
+                      setIsStaffDropdownOpen(true);
                     }}
-                  >
-                    <option value="">All Staff</option>
-                    {staffList.map(s => (
-                      <option key={s.uid} value={s.uid}>{s.name}</option>
-                    ))}
-                  </select>
-                  <div style={{
-                    position: 'absolute',
-                    right: '16px',
-                    top: '50%',
-                    transform: 'translateY(-50%)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    pointerEvents: 'none',
-                    color: 'var(--text-secondary)'
-                  }}>
-                    <ChevronDown size={16} />
-                  </div>
+                    onFocus={() => setIsStaffDropdownOpen(true)}
+                    style={{ margin: 0 }}
+                  />
+                  {staffSearchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => handleSelectStaff(null)}
+                      style={{
+                        position: 'absolute',
+                        right: '16px',
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        background: 'none',
+                        border: 'none',
+                        cursor: 'pointer',
+                        color: 'var(--text-secondary)',
+                        display: 'flex',
+                        alignItems: 'center'
+                      }}
+                    >
+                      <X size={16} />
+                    </button>
+                  )}
+                  {isStaffDropdownOpen && (
+                    <div style={{
+                      position: 'absolute',
+                      top: '52px',
+                      left: 0,
+                      right: 0,
+                      zIndex: 1010,
+                    }}>
+                      <NeuCard variant="raised" style={{ padding: '8px', display: 'flex', flexDirection: 'column', gap: '4px', maxHeight: '160px', overflowY: 'auto' }}>
+                        <button
+                          type="button"
+                          onClick={() => handleSelectStaff(null)}
+                          style={{
+                            width: '100%',
+                            padding: '8px 12px',
+                            background: 'transparent',
+                            border: 'none',
+                            borderRadius: 'var(--border-radius-sm)',
+                            textAlign: 'left',
+                            color: 'var(--text-primary)',
+                            fontSize: '0.875rem',
+                            cursor: 'pointer',
+                            outline: 'none',
+                            transition: 'background-color var(--transition-fast)'
+                          }}
+                          onMouseOver={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-surface-elevated)'}
+                          onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                        >
+                          All Staff
+                        </button>
+                        {matchedStaff.length === 0 ? (
+                          <div style={{ padding: '8px 12px', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+                            No matching staff found
+                          </div>
+                        ) : (
+                          matchedStaff.map(staff => (
+                            <button
+                              key={staff.uid}
+                              type="button"
+                              onClick={() => handleSelectStaff(staff)}
+                              style={{
+                                width: '100%',
+                                padding: '8px 12px',
+                                background: 'transparent',
+                                border: 'none',
+                                borderRadius: 'var(--border-radius-sm)',
+                                textAlign: 'left',
+                                color: 'var(--text-primary)',
+                                fontSize: '0.875rem',
+                                cursor: 'pointer',
+                                outline: 'none',
+                                transition: 'background-color var(--transition-fast)'
+                              }}
+                              onMouseOver={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-surface-elevated)'}
+                              onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                            >
+                              {staff.name} {staff.username ? `(@${staff.username})` : ''}
+                            </button>
+                          ))
+                        )}
+                      </NeuCard>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -501,6 +593,7 @@ export default function AuditLog() {
                     <option value="">All Actions</option>
                     <option value="create">Create</option>
                     <option value="update">Update</option>
+                    <option value="self-edit">Self-Correction</option>
                     <option value="delete">Delete</option>
                   </select>
                   <div style={{
@@ -537,6 +630,7 @@ export default function AuditLog() {
                 <NeuButton 
                   onClick={() => {
                     setFilterStaff('');
+                    setStaffSearchQuery('');
                     setFilterAction('');
                     setDateStart('');
                     setDateEnd('');
@@ -585,10 +679,11 @@ export default function AuditLog() {
                         
                         const isExpanded = expandedLogId === log.id;
                         
-                        // Map badge variants for create/update/delete
+                        // Map badge variants for create/update/delete/self-edit
                         let badgeVariant = 'present';
                         if (log.action === 'update') badgeVariant = 'late';
                         if (log.action === 'delete') badgeVariant = 'absent';
+                        if (log.action === 'self-edit') badgeVariant = 'late';
 
                         return (
                           <React.Fragment key={log.id}>

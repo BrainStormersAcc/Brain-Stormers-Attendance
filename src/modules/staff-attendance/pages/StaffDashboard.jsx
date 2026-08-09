@@ -430,6 +430,7 @@ export default function StaffDashboard() {
 
   // Open edit modal pre-filled with record data
   const handleOpenEditModal = (log) => {
+    if (userProfile?.role !== 'admin') return;
     const formatTimeInput = (timestamp) => {
       if (!timestamp) return '';
       const date = new Date(timestamp.seconds ? timestamp.seconds * 1000 : timestamp);
@@ -618,20 +619,24 @@ export default function StaffDashboard() {
           batch.set(auditLogRef, auditLogData);
         }
       } else {
-        // CREATE Mode (Staff - Logging own attendance)
+        // CREATE Mode (Staff - Logging own or peer attendance)
         const duplicate = rawLogs.find(
-          log => log.userId === currentUser.uid && log.date === manualDate && log.isDeleted !== true
+          log => log.userId === manualStaff.uid && log.date === manualDate && log.isDeleted !== true
         );
         if (duplicate) {
-          setManualError('An active attendance record already exists for you on this date.');
+          setManualError(manualStaff.uid === currentUser.uid 
+            ? 'An active attendance record already exists for you on this date.'
+            : `An active attendance record already exists for ${manualStaff.name} on this date.`);
           setManualSubmitting(false);
           return;
         }
 
         // A. Setup attendance document for creation
         const attendanceRef = doc(collection(db, 'attendance'));
+        const attendanceId = attendanceRef.id;
+
         const newAttendanceData = {
-          userId: currentUser.uid,
+          userId: manualStaff.uid,
           role: 'staff',
           date: manualDate,
           checkIn: checkInDate,
@@ -644,7 +649,24 @@ export default function StaffDashboard() {
         };
 
         batch.set(attendanceRef, newAttendanceData);
-        // Do NOT write to auditLogs (since non-admins are blocked from auditLogs collection)
+
+        // B. Setup auditLog document for create action
+        const auditLogRef = doc(collection(db, 'auditLogs'));
+        const auditLogData = {
+          action: 'create',
+          targetCollection: 'attendance',
+          targetDocId: attendanceId,
+          performedBy: currentUser.uid,
+          performedByName: userProfile?.name || 'Staff Member',
+          timestamp: serverTimestamp(),
+          reason: manualStaff.uid === currentUser.uid 
+            ? 'Self check-in logged' 
+            : `Peer-marked check-in for ${manualStaff.name}`,
+          previousData: null,
+          newData: newAttendanceData
+        };
+
+        batch.set(auditLogRef, auditLogData);
       }
 
       // Commit transaction batch
@@ -670,6 +692,7 @@ export default function StaffDashboard() {
 
   // Open soft-delete confirmation modal
   const handleOpenDeleteModal = (log) => {
+    if (userProfile?.role !== 'admin') return;
     setDeletingRecord(log);
     setDeleteReason('');
     setDeleteError('');
@@ -680,6 +703,11 @@ export default function StaffDashboard() {
   // Confirm and commit soft-delete
   const handleConfirmSoftDelete = async (e) => {
     e.preventDefault();
+    if (userProfile?.role !== 'admin') {
+      setDeleteError('Unauthorized action. Only admins can soft-delete records.');
+      setDeleteSubmitting(false);
+      return;
+    }
     setDeleteError('');
     setDeleteSubmitting(true);
 

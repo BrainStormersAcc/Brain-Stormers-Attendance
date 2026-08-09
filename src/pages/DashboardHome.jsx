@@ -33,7 +33,8 @@ import {
   toggleStaffStatus, 
   editStaffCredentials,
   deleteStaffAccount,
-  getAllAttendance 
+  getAllAttendance,
+  purgeAllAttendanceData
 } from '../services/adminService.js';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import Skeleton from '../shared/components/Skeleton.jsx';
@@ -54,6 +55,13 @@ export default function DashboardHome(props) {
   const [adminPassword, setAdminPassword] = useState(userProfile?.password || '');
   const [adminCurrentPassword, setAdminCurrentPassword] = useState('');
   const [updatingAdmin, setUpdatingAdmin] = useState(false);
+
+  // System Reset States
+  const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
+  const [resetKeyword, setResetKeyword] = useState('');
+  const [resetSubmitting, setResetSubmitting] = useState(false);
+  const [resetError, setResetError] = useState('');
+  const [resetSuccess, setResetSuccess] = useState('');
 
   useEffect(() => {
     if (userProfile) {
@@ -89,6 +97,34 @@ export default function DashboardHome(props) {
       }
     } finally {
       setUpdatingAdmin(false);
+    }
+  };
+
+  // Perform full database reset of attendance history and audit logs
+  const handleSystemReset = async (e) => {
+    e.preventDefault();
+    if (resetKeyword !== 'RESET') {
+      setResetError("Please type 'RESET' exactly to confirm deletion.");
+      return;
+    }
+    
+    setResetSubmitting(true);
+    setResetError('');
+    setResetSuccess('');
+    
+    try {
+      await purgeAllAttendanceData();
+      setResetSuccess('System reset complete. All attendance records and audit logs have been successfully deleted.');
+      setResetKeyword('');
+      setTimeout(() => {
+        setIsResetConfirmOpen(false);
+        setResetSuccess('');
+      }, 3000);
+    } catch (err) {
+      console.error('System reset failed:', err);
+      setResetError(err.message || 'Failed to purge system records.');
+    } finally {
+      setResetSubmitting(false);
     }
   };
 
@@ -306,6 +342,10 @@ export default function DashboardHome(props) {
 
   // Handle Account Deletion
   const handleDeleteStaff = async () => {
+    if (userProfile?.role !== 'admin') {
+      setError('Unauthorized action. Only admins can delete staff credentials.');
+      return;
+    }
     setDeleting(true);
     setError('');
     setSuccess('');
@@ -1223,64 +1263,223 @@ export default function DashboardHome(props) {
 
         {/* VIEW: ADMIN SETTINGS */}
         {activeTab === 'admin-settings' && (
-          <NeuCard variant="raised" style={{ padding: '32px', maxWidth: '600px', margin: '0 auto' }}>
-            <h3 style={{ fontSize: '1.25rem', marginBottom: '20px', fontFamily: 'var(--font-display)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Users size={18} style={{ color: 'var(--color-primary)' }} />
-              <span>Admin Profile & Credentials</span>
-            </h3>
-            
-            <form onSubmit={handleUpdateAdminProfile} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-              <NeuInput
-                label="Full Name"
-                placeholder="e.g. Administrator"
-                value={adminName}
-                onChange={(e) => setAdminName(e.target.value)}
-                required
-                disabled={updatingAdmin}
-              />
-              <NeuInput
-                label="Username (Cannot be changed)"
-                placeholder="e.g. admin"
-                value={adminUsername}
-                disabled={true}
-                style={{ opacity: 0.7, cursor: 'not-allowed' }}
-              />
-              <NeuInput
-                label="Phone Number"
-                placeholder="e.g. +1234567890"
-                value={adminPhone}
-                onChange={(e) => setAdminPhone(e.target.value)}
-                disabled={updatingAdmin}
-              />
-              <NeuInput
-                type="password"
-                label="New Password"
-                placeholder="Enter new password"
-                value={adminPassword}
-                onChange={(e) => setAdminPassword(e.target.value)}
-                required
-                disabled={updatingAdmin}
-              />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '32px', maxWidth: '600px', margin: '0 auto' }}>
+            <NeuCard variant="raised" style={{ padding: '32px' }}>
+              <h3 style={{ fontSize: '1.25rem', marginBottom: '20px', fontFamily: 'var(--font-display)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Users size={18} style={{ color: 'var(--color-primary)' }} />
+                <span>Admin Profile & Credentials</span>
+              </h3>
               
-              <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '20px', marginTop: '10px' }}>
+              <form onSubmit={handleUpdateAdminProfile} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                 <NeuInput
-                  type="password"
-                  label="Confirm Current Password"
-                  placeholder="Enter current password to apply changes"
-                  value={adminCurrentPassword}
-                  onChange={(e) => setAdminCurrentPassword(e.target.value)}
+                  label="Full Name"
+                  placeholder="e.g. Administrator"
+                  value={adminName}
+                  onChange={(e) => setAdminName(e.target.value)}
                   required
                   disabled={updatingAdmin}
                 />
-              </div>
+                <NeuInput
+                  label="Username (Cannot be changed)"
+                  placeholder="e.g. admin"
+                  value={adminUsername}
+                  disabled={true}
+                  style={{ opacity: 0.7, cursor: 'not-allowed' }}
+                />
+                <NeuInput
+                  label="Phone Number"
+                  placeholder="e.g. +1234567890"
+                  value={adminPhone}
+                  onChange={(e) => setAdminPhone(e.target.value)}
+                  disabled={updatingAdmin}
+                />
+                <NeuInput
+                  type="password"
+                  label="New Password"
+                  placeholder="Enter new password"
+                  value={adminPassword}
+                  onChange={(e) => setAdminPassword(e.target.value)}
+                  required
+                  disabled={updatingAdmin}
+                />
+                
+                <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '20px', marginTop: '10px' }}>
+                  <NeuInput
+                    type="password"
+                    label="Confirm Current Password"
+                    placeholder="Enter current password to apply changes"
+                    value={adminCurrentPassword}
+                    onChange={(e) => setAdminCurrentPassword(e.target.value)}
+                    required
+                    disabled={updatingAdmin}
+                  />
+                </div>
 
-              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '10px' }}>
-                <NeuButton type="submit" variant="accent" disabled={updatingAdmin}>
-                  {updatingAdmin ? 'Saving Changes...' : 'Save Settings'}
-                </NeuButton>
-              </div>
-            </form>
-          </NeuCard>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '10px' }}>
+                  <NeuButton type="submit" variant="accent" disabled={updatingAdmin}>
+                    {updatingAdmin ? 'Saving Changes...' : 'Save Settings'}
+                  </NeuButton>
+                </div>
+              </form>
+            </NeuCard>
+
+            {/* System Reset & Data Purge Card */}
+            <NeuCard variant="raised" style={{ padding: '32px', border: '1px solid rgba(239, 68, 68, 0.15)', display: 'flex', flexDirection: 'column', gap: '20px', position: 'relative', overflow: 'hidden' }}>
+              {/* Deleting animation overlay */}
+              {resetSubmitting && (
+                <div style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  backgroundColor: 'var(--bg-base)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '20px',
+                  zIndex: 20,
+                  animation: 'fadeIn 0.3s ease-out'
+                }}>
+                  <style>{`
+                    @keyframes move-beam {
+                      0% { left: -60px; }
+                      100% { left: 100%; }
+                    }
+                    @keyframes pulse-text {
+                      0%, 100% { opacity: 0.6; }
+                      50% { opacity: 1; }
+                    }
+                  `}</style>
+                  {/* Neumorphic progress bar with scanner beam */}
+                  <div style={{
+                    position: 'relative',
+                    width: '280px',
+                    height: '12px',
+                    backgroundColor: 'var(--bg-base)',
+                    boxShadow: 'var(--neu-shadow-pressed-sm)',
+                    borderRadius: 'var(--border-radius-full)',
+                    overflow: 'hidden'
+                  }}>
+                    <div style={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      height: '100%',
+                      width: '100%',
+                      backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                    }} />
+                    {/* Scanner beam */}
+                    <div style={{
+                      position: 'absolute',
+                      top: 0,
+                      height: '100%',
+                      width: '60px',
+                      background: 'linear-gradient(90deg, transparent, var(--color-danger), transparent)',
+                      boxShadow: '0 0 12px var(--color-danger)',
+                      animation: 'move-beam 1.5s linear infinite'
+                    }} />
+                  </div>
+                  <div style={{
+                    fontFamily: 'var(--font-display)',
+                    fontSize: '1.05rem',
+                    fontWeight: 600,
+                    color: 'var(--color-danger)',
+                    animation: 'pulse-text 1.5s ease-in-out infinite',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px'
+                  }}>
+                    <Trash2 size={18} className="animate-spin" style={{ animationDuration: '3s' }} />
+                    <span>Purging attendance registry records...</span>
+                  </div>
+                </div>
+              )}
+
+              <h3 style={{ fontSize: '1.25rem', fontFamily: 'var(--font-display)', display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-danger)' }}>
+                <Trash2 size={20} />
+                <span>Danger Zone: System Reset</span>
+              </h3>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', lineHeight: '1.5', margin: 0 }}>
+                Permanently delete all attendance history and override audit logs from the database. This is used for a complete system reset (e.g., when changing all staff members). 
+                <strong> This action is irreversible.</strong>
+              </p>
+              
+              {isResetConfirmOpen ? (
+                <form onSubmit={handleSystemReset} style={{ display: 'flex', flexDirection: 'column', gap: '16px', borderTop: '1px solid var(--border-color)', paddingTop: '20px' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <label className="neu-input-label" style={{ color: 'var(--color-danger)', fontWeight: 600 }}>
+                      Type "RESET" to confirm permanent deletion
+                    </label>
+                    <NeuInput
+                      type="text"
+                      placeholder="Type RESET in all caps..."
+                      value={resetKeyword}
+                      onChange={(e) => setResetKeyword(e.target.value)}
+                      required
+                      disabled={resetSubmitting}
+                      style={{ margin: 0 }}
+                    />
+                  </div>
+
+                  {resetError && (
+                    <div style={{ color: 'var(--color-danger)', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <AlertCircle size={14} />
+                      <span>{resetError}</span>
+                    </div>
+                  )}
+
+                  {resetSuccess && (
+                    <div style={{ color: 'var(--color-success)', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <CheckCircle2 size={14} />
+                      <span>{resetSuccess}</span>
+                    </div>
+                  )}
+
+                  <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '4px' }}>
+                    <NeuButton 
+                      type="button" 
+                      onClick={() => {
+                        setIsResetConfirmOpen(false);
+                        setResetKeyword('');
+                        setResetError('');
+                        setResetSuccess('');
+                      }}
+                      disabled={resetSubmitting}
+                    >
+                      Cancel
+                    </NeuButton>
+                    <NeuButton 
+                      type="submit" 
+                      variant="accent" 
+                      disabled={resetSubmitting || resetKeyword !== 'RESET'}
+                      style={{ 
+                        backgroundColor: resetKeyword === 'RESET' ? 'rgba(239, 68, 68, 0.1)' : 'transparent',
+                        borderColor: resetKeyword === 'RESET' ? 'var(--color-danger)' : 'var(--border-color)',
+                        color: resetKeyword === 'RESET' ? 'var(--color-danger)' : 'var(--text-muted)'
+                      }}
+                    >
+                      {resetSubmitting ? 'Purging Database...' : 'Confirm System Purge'}
+                    </NeuButton>
+                  </div>
+                </form>
+              ) : (
+                <div style={{ display: 'flex', justifyContent: 'flex-end', borderTop: '1px solid var(--border-color)', paddingTop: '20px' }}>
+                  <NeuButton 
+                    type="button"
+                    onClick={() => setIsResetConfirmOpen(true)}
+                    style={{ 
+                      color: 'var(--color-danger)', 
+                      borderColor: 'rgba(239, 68, 68, 0.3)'
+                    }}
+                  >
+                    Reset All Attendance Data
+                  </NeuButton>
+                </div>
+              )}
+            </NeuCard>
+          </div>
         )}
           </>
         )}
@@ -1452,6 +1651,119 @@ export default function DashboardHome(props) {
                 {deleting ? 'Deleting...' : 'Confirm Delete'}
               </NeuButton>
             </div>
+          </NeuCard>
+        </div>
+      )}
+
+      {/* System Reset Success Modal */}
+      {resetSuccess && (
+        <div style={{
+          position: 'fixed',
+          top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(15, 23, 42, 0.4)',
+          backdropFilter: 'blur(8px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1100,
+          animation: 'fadeIn 0.25s ease-out'
+        }}>
+          <NeuCard variant="raised" style={{
+            width: '100%',
+            maxWidth: '420px',
+            padding: '40px 32px',
+            textAlign: 'center',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: '24px',
+            animation: 'scaleUpAndGlow 0.4s cubic-bezier(0.16, 1, 0.3, 1)'
+          }}>
+            <div style={{
+              width: '80px',
+              height: '80px',
+              borderRadius: '50%',
+              backgroundColor: 'var(--bg-surface-elevated)',
+              boxShadow: 'var(--neu-shadow-pressed-sm), 0 0 20px rgba(74, 222, 128, 0.2)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: 'var(--color-success)'
+            }}>
+              <CheckCircle2 size={48} />
+            </div>
+            <div>
+              <h3 style={{ fontSize: '1.5rem', fontFamily: 'var(--font-display)', marginBottom: '8px', color: 'var(--text-primary)' }}>
+                System Reset Complete
+              </h3>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', lineHeight: '1.5' }}>
+                All attendance logs and override history have been purged from the system.
+              </p>
+            </div>
+            <NeuButton 
+              onClick={() => {
+                setResetSuccess('');
+                setIsResetConfirmOpen(false);
+              }}
+              variant="accent"
+              style={{ width: '100%', padding: '12px' }}
+            >
+              Start From Zero
+            </NeuButton>
+          </NeuCard>
+        </div>
+      )}
+
+      {resetError && (
+        <div style={{
+          position: 'fixed',
+          top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(15, 23, 42, 0.4)',
+          backdropFilter: 'blur(8px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1100,
+          animation: 'fadeIn 0.25s ease-out'
+        }}>
+          <NeuCard variant="raised" style={{
+            width: '100%',
+            maxWidth: '420px',
+            padding: '40px 32px',
+            textAlign: 'center',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: '24px',
+            animation: 'scaleUpAndGlow 0.4s cubic-bezier(0.16, 1, 0.3, 1)'
+          }}>
+            <div style={{
+              width: '80px',
+              height: '80px',
+              borderRadius: '50%',
+              backgroundColor: 'var(--bg-surface-elevated)',
+              boxShadow: 'var(--neu-shadow-pressed-sm), 0 0 20px rgba(239, 68, 68, 0.2)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: 'var(--color-danger)'
+            }}>
+              <AlertCircle size={48} />
+            </div>
+            <div>
+              <h3 style={{ fontSize: '1.5rem', fontFamily: 'var(--font-display)', marginBottom: '8px', color: 'var(--text-primary)' }}>
+                System Reset Failed
+              </h3>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', lineHeight: '1.5', wordBreak: 'break-word' }}>
+                {resetError}
+              </p>
+            </div>
+            <NeuButton 
+              onClick={() => setResetError('')}
+              style={{ width: '100%', padding: '12px', color: 'var(--color-danger)', borderColor: 'rgba(239, 68, 68, 0.2)' }}
+            >
+              Try Again
+            </NeuButton>
           </NeuCard>
         </div>
       )}

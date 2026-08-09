@@ -6,6 +6,7 @@ import Login from './pages/Login';
 import DashboardLayout from './shared/components/DashboardLayout';
 import DashboardHome from './pages/DashboardHome';
 import AuditLog from './pages/AuditLog';
+import MisuseMonitoring from './pages/MisuseMonitoring';
 import NotFound from './pages/NotFound';
 import StyleGuide from './pages/StyleGuide';
 
@@ -71,6 +72,14 @@ function App() {
             element={
               <ProtectedRoute requiredRole="admin">
                 <AuditLog />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="misuse-monitoring" 
+            element={
+              <ProtectedRoute requiredRole="admin">
+                <MisuseMonitoring />
               </ProtectedRoute>
             } 
           />
