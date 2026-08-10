@@ -211,6 +211,20 @@ export default function StaffDashboard() {
     };
   }, []);
 
+  // Search dropdown ref for click outside detection (Profiles search)
+  const profileSearchDropdownRef = useRef(null);
+  const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (profileSearchDropdownRef.current && !profileSearchDropdownRef.current.contains(e.target)) {
+        setIsProfileDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   // Reset pagination page on filter state shifts
   useEffect(() => {
     setCurrentPage(1);
@@ -2879,15 +2893,89 @@ export default function StaffDashboard() {
             </p>
           </div>
           {rawStaffList.length > 0 && (
-            <div style={{ width: '100%', maxWidth: '300px' }}>
+            <div ref={profileSearchDropdownRef} style={{ width: '100%', maxWidth: '300px', position: 'relative' }}>
               <NeuInput
                 type="text"
                 placeholder="Search staff..."
                 value={profileSearchQuery}
-                onChange={(e) => setProfileSearchQuery(e.target.value)}
+                onChange={(e) => {
+                  setProfileSearchQuery(e.target.value);
+                  setIsProfileDropdownOpen(true);
+                }}
+                onFocus={() => setIsProfileDropdownOpen(true)}
                 icon={Search}
                 style={{ margin: 0 }}
               />
+              {profileSearchQuery && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setProfileSearchQuery('');
+                    setIsProfileDropdownOpen(false);
+                  }}
+                  style={{
+                    position: 'absolute',
+                    right: '16px',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    color: 'var(--text-secondary)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    zIndex: 10
+                  }}
+                >
+                  <X size={16} />
+                </button>
+              )}
+              {isProfileDropdownOpen && (
+                <div style={{
+                  position: 'absolute',
+                  top: '52px',
+                  left: 0,
+                  right: 0,
+                  zIndex: 1010,
+                }}>
+                  <NeuCard variant="raised" style={{ padding: '8px', display: 'flex', flexDirection: 'column', gap: '4px', maxHeight: '160px', overflowY: 'auto' }}>
+                    {filteredStaff.length === 0 ? (
+                      <div style={{ padding: '8px 12px', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+                        No matching staff found
+                      </div>
+                    ) : (
+                      filteredStaff.map(staff => (
+                        <button
+                          key={staff.uid}
+                          type="button"
+                          onClick={() => {
+                            setSelectedProfileStaff(staff);
+                            setIsProfileDropdownOpen(false);
+                            setProfileSearchQuery('');
+                          }}
+                          style={{
+                            width: '100%',
+                            padding: '8px 12px',
+                            background: 'transparent',
+                            border: 'none',
+                            borderRadius: 'var(--border-radius-sm)',
+                            textAlign: 'left',
+                            color: 'var(--text-primary)',
+                            fontSize: '0.875rem',
+                            cursor: 'pointer',
+                            outline: 'none',
+                            transition: 'background-color var(--transition-fast)'
+                          }}
+                          onMouseOver={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-surface-elevated)'}
+                          onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                        >
+                          {staff.name} (@{staff.username})
+                        </button>
+                      ))
+                    )}
+                  </NeuCard>
+                </div>
+              )}
             </div>
           )}
         </div>

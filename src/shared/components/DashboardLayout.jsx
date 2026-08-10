@@ -16,7 +16,12 @@ import {
   Check,
   RefreshCw,
   ClipboardList,
-  ShieldAlert
+  ShieldAlert,
+  Shield,
+  ChevronDown,
+  ChevronUp,
+  Calendar,
+  Layers
 } from 'lucide-react';
 import NeuThemeToggle from './NeuThemeToggle';
 import { useAuth } from '../../contexts/AuthContext.jsx';
@@ -34,6 +39,28 @@ function DashboardLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [pageTransitioning, setPageTransitioning] = useState(false);
+  
+  const [isAdminPanelOpen, setIsAdminPanelOpen] = useState(() => {
+    return ['/admin-settings', '/staff-management'].includes(location.pathname);
+  });
+  const [isAttendancePanelOpen, setIsAttendancePanelOpen] = useState(() => {
+    return location.pathname.startsWith('/staff-attendance');
+  });
+  const [isAttendanceExpandsOpen, setIsAttendanceExpandsOpen] = useState(() => {
+    return ['/attendance-records', '/audit-log', '/misuse-monitoring'].includes(location.pathname);
+  });
+
+  useEffect(() => {
+    if (['/admin-settings', '/staff-management'].includes(location.pathname)) {
+      setIsAdminPanelOpen(true);
+    }
+    if (location.pathname.startsWith('/staff-attendance')) {
+      setIsAttendancePanelOpen(true);
+    }
+    if (['/attendance-records', '/audit-log', '/misuse-monitoring'].includes(location.pathname)) {
+      setIsAttendanceExpandsOpen(true);
+    }
+  }, [location.pathname]);
 
   useEffect(() => {
     setPageTransitioning(true);
@@ -168,14 +195,35 @@ function DashboardLayout() {
 
   const navItems = [
     (isStaff || isAdmin) && { name: 'Overview', path: '/', icon: LayoutDashboard },
-    isAdmin && { name: 'Staff Account Management', path: '/staff-management', icon: Users },
-    (isStaff || isAdmin) && { name: 'Attendance Records', path: '/attendance-records', icon: Clock },
-    isAdmin && { name: 'Admin Settings', path: '/admin-settings', icon: Settings },
-    isAdmin && { name: 'Audit Log', path: '/audit-log', icon: ClipboardList },
-    isAdmin && { name: 'Misuse Monitoring', path: '/misuse-monitoring', icon: ShieldAlert },
-    (isStaff || isAdmin) && { name: 'Staff Attendance', path: '/staff-attendance', icon: Clock },
-    { name: 'Student Portal (Under Development)', path: '#', icon: GraduationCap, underConstruction: true },
-    { name: 'Teacher Portal (Under Development)', path: '#', icon: Users, underConstruction: true },
+    isAdmin && {
+      name: 'Admin Control Panel',
+      isGroup: true,
+      icon: Shield,
+      subItems: [
+        { name: 'Admin Settings', path: '/admin-settings', icon: Settings },
+        { name: 'Staff Account Management', path: '/staff-management', icon: Users },
+      ]
+    },
+    (isStaff || isAdmin) && {
+      name: 'Attendance Panel',
+      isGroup: true,
+      icon: Calendar,
+      subItems: [
+        { name: 'Staff Portal', path: '/staff-attendance', icon: Clock },
+        { name: 'Student Portal (Under Development)', path: '#', icon: GraduationCap, underConstruction: true },
+        { name: 'Teacher Portal (Under Development)', path: '#', icon: Users, underConstruction: true },
+      ]
+    },
+    (isStaff || isAdmin) && {
+      name: 'Attendance Expands',
+      isGroup: true,
+      icon: Layers,
+      subItems: [
+        (isStaff || isAdmin) && { name: 'Attendance Records', path: '/attendance-records', icon: Clock },
+        isAdmin && { name: 'Audit Log', path: '/audit-log', icon: ClipboardList },
+        isAdmin && { name: 'Misuse Monitoring', path: '/misuse-monitoring', icon: ShieldAlert },
+      ].filter(Boolean)
+    }
   ].filter(Boolean);
 
   const getBreadcrumbs = () => {
@@ -272,6 +320,120 @@ function DashboardLayout() {
             const Icon = item.icon;
             const isActive = location.pathname === item.path;
             
+            if (item.isGroup) {
+              const isSubActive = item.subItems.some(sub => location.pathname === sub.path);
+              
+              let isOpen = false;
+              if (item.name === 'Admin Control Panel') isOpen = isAdminPanelOpen;
+              else if (item.name === 'Attendance Panel') isOpen = isAttendancePanelOpen;
+              else if (item.name === 'Attendance Expands') isOpen = isAttendanceExpandsOpen;
+              
+              const toggleOpen = () => {
+                if (item.name === 'Admin Control Panel') {
+                  setIsAdminPanelOpen(!isAdminPanelOpen);
+                } else if (item.name === 'Attendance Panel') {
+                  setIsAttendancePanelOpen(!isAttendancePanelOpen);
+                } else if (item.name === 'Attendance Expands') {
+                  setIsAttendanceExpandsOpen(!isAttendanceExpandsOpen);
+                }
+              };
+
+              return (
+                <div key={idx} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <button
+                    type="button"
+                    onClick={toggleOpen}
+                    className={`sidebar-nav-link ${isSubActive ? 'active' : ''}`}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      width: '100%',
+                      padding: '11px 15px 11px 19px',
+                      color: isSubActive ? 'var(--text-primary)' : 'var(--text-secondary)',
+                      background: 'transparent',
+                      border: '1px solid transparent',
+                      borderRadius: 'var(--border-radius-sm)',
+                      transition: 'all var(--transition-fast)',
+                      fontSize: '0.95rem',
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                      outline: 'none'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      <Icon size={18} style={{ color: isSubActive ? 'var(--color-primary)' : 'inherit' }} />
+                      <span>{item.name}</span>
+                    </div>
+                    {isOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                  </button>
+                  
+                  {isOpen && (
+                    <div style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '4px',
+                      paddingLeft: '16px',
+                      borderLeft: '1px dashed var(--border-color)',
+                      marginLeft: '28px',
+                      animation: 'slideDownFast 0.2s ease-out'
+                    }}>
+                      {item.subItems.map((sub, sIdx) => {
+                        const SubIcon = sub.icon;
+                        const isSubActiveCurrent = location.pathname === sub.path;
+                        
+                        if (sub.underConstruction) {
+                          return (
+                            <div 
+                              key={sIdx} 
+                              className="under-construction-link"
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '12px',
+                                padding: '10px 12px 10px 16px',
+                                color: 'var(--text-muted)',
+                                fontSize: '0.9rem',
+                                opacity: 0.8
+                              }}
+                            >
+                              <SubIcon size={16} />
+                              <span>{sub.name}</span>
+                            </div>
+                          );
+                        }
+
+                        return (
+                          <Link
+                            key={sIdx}
+                            to={sub.path}
+                            onClick={() => setSidebarOpen(false)}
+                            className={`sidebar-nav-link ${isSubActiveCurrent ? 'active' : ''}`}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '12px',
+                              padding: '10px 12px 10px 16px',
+                              color: isSubActiveCurrent ? 'var(--text-primary)' : 'var(--text-secondary)',
+                              background: isSubActiveCurrent ? 'var(--color-success-glass)' : 'transparent',
+                              border: isSubActiveCurrent ? '1px solid var(--color-success-glass-border)' : '1px solid transparent',
+                              borderRadius: 'var(--border-radius-sm)',
+                              transition: 'all var(--transition-fast)',
+                              fontSize: '0.9rem',
+                              boxShadow: isSubActiveCurrent ? 'var(--color-success-glass-shadow)' : 'none'
+                            }}
+                          >
+                            <SubIcon size={16} style={{ color: isSubActiveCurrent ? 'var(--color-success)' : 'inherit' }} />
+                            <span>{sub.name}</span>
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            }
+
             if (item.disabled) {
               return (
                 <div key={idx} style={{
@@ -328,7 +490,7 @@ function DashboardLayout() {
       </aside>
 
       {/* Main Content Area */}
-      <div style={{ flex: 1, marginLeft: '308px', display: 'flex', flexDirection: 'column' }} className="main-container">
+      <div style={{ flex: 1, marginLeft: '338px', display: 'flex', flexDirection: 'column' }} className="main-container">
         
         {/* Top Header */}
         <header className="floating-navbar">
@@ -892,6 +1054,10 @@ function DashboardLayout() {
 
       {/* Embedded Responsive styles */}
       <style>{`
+        @keyframes slideDownFast {
+          from { opacity: 0; transform: translateY(-8px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
         .sidebar-brand-header {
           display: flex;
           align-items: center;
@@ -1073,7 +1239,7 @@ function DashboardLayout() {
         }
 
         .desktop-sidebar {
-          width: 260px;
+          width: 290px;
           background-color: var(--bg-surface-glass);
           backdrop-filter: blur(24px) saturate(190%);
           -webkit-backdrop-filter: blur(24px) saturate(190%);
@@ -1095,8 +1261,8 @@ function DashboardLayout() {
             left: 16px !important;
             top: 16px !important;
             bottom: 16px !important;
-            width: 260px !important;
-            transform: translateX(-320px) !important;
+            width: 290px !important;
+            transform: translateX(-350px) !important;
             border-radius: var(--border-radius-md) !important;
           }
           .desktop-sidebar.open {
