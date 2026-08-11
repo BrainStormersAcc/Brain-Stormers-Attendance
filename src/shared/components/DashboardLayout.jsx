@@ -21,7 +21,9 @@ import {
   ChevronDown,
   ChevronUp,
   Calendar,
-  Layers
+  Layers,
+  ArrowLeft,
+  ArrowRight
 } from 'lucide-react';
 import NeuThemeToggle from './NeuThemeToggle';
 import { useAuth } from '../../contexts/AuthContext.jsx';
@@ -226,49 +228,7 @@ function DashboardLayout() {
     }
   ].filter(Boolean);
 
-  const getBreadcrumbs = () => {
-    const path = location.pathname;
-    
-    // Always start with "Overview"
-    const crumbs = [{ name: 'Overview', path: '/' }];
-    
-    if (path === '/' || path === '') {
-      return crumbs;
-    }
-    
-    // Split and clean segments
-    const segments = path.split('/').filter(Boolean);
-    
-    let currentLink = '';
-    segments.forEach((segment) => {
-      currentLink += `/${segment}`;
-      
-      let name = segment;
-      
-      // Map segments to friendly readable names
-      if (segment === 'staff-management') name = 'Staff Account Management';
-      else if (segment === 'attendance-records') name = 'Attendance Records';
-      else if (segment === 'admin-settings') name = 'Admin Settings';
-      else if (segment === 'audit-log') name = 'Audit Log';
-      else if (segment === 'misuse-monitoring') name = 'Misuse Monitoring';
-      else if (segment === 'staff-attendance') name = 'Staff Attendance';
-      else if (segment === 'logs') name = 'Logs';
-      else {
-        // Format names like "august-2026" or "2026-08" to capitalized human-readable form
-        name = segment
-          .split('-')
-          .map(word => {
-            if (word.length === 0) return '';
-            return word.charAt(0).toUpperCase() + word.slice(1);
-          })
-          .join(' ');
-      }
-      
-      crumbs.push({ name, path: currentLink });
-    });
-    
-    return crumbs;
-  };
+
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--bg-base)', transition: 'background var(--transition-normal)' }}>
@@ -509,51 +469,71 @@ function DashboardLayout() {
             <Menu size={24} />
           </button>
 
-          {/* Breadcrumbs */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginLeft: '12px' }} className="breadcrumbs-container">
+          {/* History Navigation Buttons */}
+          <div className="neu-nav-track" style={{ marginLeft: '12px' }}>
             <style>{`
-              .breadcrumb-link:hover {
-                color: var(--color-primary) !important;
+              .neu-nav-track {
+                display: inline-flex;
+                align-items: center;
+                gap: 6px;
+                padding: 4px;
+                height: 38px;
+                background: var(--bg-surface);
+                border: 1px solid var(--border-color);
+                border-radius: var(--border-radius-full);
+                box-shadow: var(--neu-shadow-pressed-sm);
+                transition: all var(--transition-normal);
+              }
+              .neu-nav-btn {
+                width: 28px;
+                height: 28px;
+                border-radius: 50%;
+                background: var(--bg-surface);
+                color: var(--text-secondary);
+                border: 1px solid var(--border-color);
+                box-shadow: var(--neu-shadow-raised-sm);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                cursor: pointer;
+                outline: none;
+                transition: all var(--transition-fast);
+              }
+              .neu-nav-btn:hover {
+                background: var(--bg-surface-elevated);
+                color: var(--color-primary);
+                transform: translateY(-0.5px);
+                box-shadow: -2px -2px 6px var(--color-shadow-light), 2px 2px 6px var(--color-shadow-dark);
+              }
+              .neu-nav-btn:active {
+                box-shadow: var(--neu-shadow-pressed-sm);
+                transform: translateY(0);
+              }
+              .neu-nav-btn:disabled {
+                opacity: 0.3;
+                cursor: not-allowed;
+                pointer-events: none;
+                box-shadow: none;
+                background: transparent;
+                border-color: transparent;
               }
             `}</style>
-            {getBreadcrumbs().map((crumb, idx, arr) => {
-              const isLast = idx === arr.length - 1;
-              const validPaths = ['/', '/staff-management', '/attendance-records', '/admin-settings', '/audit-log', '/staff-attendance'];
-              const isClickable = validPaths.includes(crumb.path) && !isLast;
-
-              return (
-                <React.Fragment key={idx}>
-                  {idx > 0 && (
-                    <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem', padding: '0 2px', userSelect: 'none' }}>&gt;</span>
-                  )}
-                  {isClickable ? (
-                    <Link
-                      to={crumb.path}
-                      style={{
-                        color: 'var(--text-secondary)',
-                        textDecoration: 'none',
-                        fontSize: '0.85rem',
-                        fontWeight: 500,
-                        transition: 'color var(--transition-fast)'
-                      }}
-                      className="breadcrumb-link"
-                    >
-                      {crumb.name}
-                    </Link>
-                  ) : (
-                    <span style={{
-                      color: isLast ? 'var(--text-primary)' : 'var(--text-secondary)',
-                      fontWeight: isLast ? 600 : 500,
-                      fontSize: '0.85rem',
-                      fontFamily: isLast ? 'var(--font-display)' : 'inherit',
-                      userSelect: 'none'
-                    }}>
-                      {crumb.name}
-                    </span>
-                  )}
-                </React.Fragment>
-              );
-            })}
+            <button 
+              onClick={() => navigate(-1)} 
+              className="neu-nav-btn" 
+              title="Go Back"
+              aria-label="Go Back"
+            >
+              <ArrowLeft size={14} />
+            </button>
+            <button 
+              onClick={() => navigate(1)} 
+              className="neu-nav-btn" 
+              title="Go Forward"
+              aria-label="Go Forward"
+            >
+              <ArrowRight size={14} />
+            </button>
           </div>
 
           <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '20px' }}>
