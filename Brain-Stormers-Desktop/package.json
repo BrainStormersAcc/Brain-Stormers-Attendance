@@ -1,0 +1,48 @@
+{
+  "name": "brain-stormers-desktop",
+  "version": "0.1.0",
+  "description": "Desktop wrapper for Brain Stormers Attendance PWA using Electron",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron main.js",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder",
+    "build": "electron-builder"
+  },
+  "keywords": [
+    "electron",
+    "attendance",
+    "desktop"
+  ],
+  "author": "Brain Stormers",
+  "license": "ISC",
+  "devDependencies": {
+    "electron": "^43.4.0",
+    "electron-builder": "^26.15.3"
+  },
+  "build": {
+    "appId": "com.brainstormers.desktop",
+    "productName": "Brain Stormers Attendance",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "main.js",
+      "package.json",
+      "assets/**",
+      "index.html",
+      "error.html",
+      "../dist/**"
+    ],
+    "extraResources": [
+      {
+        "from": "../dist",
+        "to": "dist",
+        "filter": ["**/*"]
+      }
+    ],
+    "win": {
+      "target": "nsis"
+    }
+  }
+}

@@ -1,0 +1,2 @@
+This is a placeholder for icon.ico. Please replace this binary file with your compiled Brain Stormers brand Windows icon (.ico) resource for final production packaging.
+During development, the shell automatically copies the parent React logo.png as icon.png to display high-fidelity graphics.

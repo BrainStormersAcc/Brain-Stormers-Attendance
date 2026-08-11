@@ -1,0 +1,79 @@
+# Brain Stormers Desktop Wrapper
+
+This is a standalone Electron desktop application wrapper for the **Brain Stormers Attendance** progressive web app.
+
+## Project Structure
+- `main.js`: Electron main process entry point.
+- `index.html`: Desktop wrapper splash screen placeholder.
+- `assets/`: Asset folder for desktop icon files.
+- `.gitignore`: Scope-limited git ignore file.
+
+## Prerequisites
+
+Before running or building the desktop application, you **must compile the main React PWA application** to create the built resources.
+
+1. Navigate to the project root directory (if not already there):
+   ```bash
+   cd ..
+   ```
+2. Build the production resources:
+   ```bash
+   npm run build
+   ```
+   This will create a `dist/` directory at the project root which the Electron wrapper loads directly.
+
+## Setup & Running Locally
+
+1. **Open your terminal and navigate to the desktop subfolder**:
+   ```bash
+   cd Brain-Stormers-Desktop
+   ```
+2. **Install dependencies** (skip if already done):
+   ```bash
+   npm install
+   ```
+3. **Launch the desktop application**:
+   ```bash
+   npm start
+   ```
+
+## Production Packaging & Installer Creation
+
+This wrapper uses `electron-builder` to package assets and construct production installers.
+
+### Full Build Process
+1. **Compile the PWA** (once, at project root):
+   ```bash
+   npm run build
+   ```
+2. **Navigate to the desktop wrapper folder** and install dependencies if needed:
+   ```bash
+   cd Brain-Stormers-Desktop
+   npm install
+   ```
+3. **Create the Windows installer**:
+   ```bash
+   npm run build
+   ```
+   The command runs `electron-builder` with the configuration defined in `package.json`. The resulting installer (`*.exe`) will be placed in the `release/` folder inside `Brain-Stormers-Desktop`.
+
+### Installer Details
+- **App ID:** `com.brainstormers.desktop`
+- **Product Name:** `Brain Stormers Attendance`
+- **Target:** NSIS Windows installer (`*.exe`)
+- The installer bundles the compiled PWA output from `../dist/` so the installed app works offline and loads the exact same UI as the web version.
+
+### Optional Signing
+If you have a code-signing certificate, you can sign the installer by adding the appropriate `win` signing options to the `build` configuration in `package.json`.
+
+---
+## Running the Installed App
+After installing, launch the app from the Start menu or a desktop shortcut. The window title will read **"Brain Stormers Attendance"**, and the app will display the same login screen, dashboards, and admin panel as the web version.
+
+---
+## Troubleshooting
+- Ensure the `dist/` folder exists at the project root before building the installer.
+- If the app cannot find the UI assets after installation, verify that the `release/` folder contains the bundled `dist/` resources.
+
+---
+*Feel free to customize the NSIS installer (shortcuts, license, etc.) by extending the `build.win` configuration in `package.json`.*

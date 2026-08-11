@@ -23,7 +23,9 @@ import {
   Calendar,
   Layers,
   ArrowLeft,
-  ArrowRight
+  ArrowRight,
+  Cpu,
+  Smartphone
 } from 'lucide-react';
 import NeuThemeToggle from './NeuThemeToggle';
 import { useAuth } from '../../contexts/AuthContext.jsx';
@@ -51,6 +53,9 @@ function DashboardLayout() {
   const [isAttendanceExpandsOpen, setIsAttendanceExpandsOpen] = useState(() => {
     return ['/attendance-records', '/audit-log', '/misuse-monitoring'].includes(location.pathname);
   });
+  const [isDeviceManagementOpen, setIsDeviceManagementOpen] = useState(() => {
+    return location.pathname.startsWith('/device-management');
+  });
 
   useEffect(() => {
     if (['/admin-settings', '/staff-management'].includes(location.pathname)) {
@@ -61,6 +66,9 @@ function DashboardLayout() {
     }
     if (['/attendance-records', '/audit-log', '/misuse-monitoring'].includes(location.pathname)) {
       setIsAttendanceExpandsOpen(true);
+    }
+    if (location.pathname.startsWith('/device-management')) {
+      setIsDeviceManagementOpen(true);
     }
   }, [location.pathname]);
 
@@ -225,6 +233,14 @@ function DashboardLayout() {
         isAdmin && { name: 'Audit Log', path: '/audit-log', icon: ClipboardList },
         isAdmin && { name: 'Misuse Monitoring', path: '/misuse-monitoring', icon: ShieldAlert },
       ].filter(Boolean)
+    },
+    isAdmin && {
+      name: 'Device Management',
+      isGroup: true,
+      icon: Cpu,
+      subItems: [
+        { name: 'Device List (Under Development)', path: '#', icon: Smartphone, underConstruction: true }
+      ]
     }
   ].filter(Boolean);
 
@@ -287,6 +303,7 @@ function DashboardLayout() {
               if (item.name === 'Admin Control Panel') isOpen = isAdminPanelOpen;
               else if (item.name === 'Attendance Panel') isOpen = isAttendancePanelOpen;
               else if (item.name === 'Attendance Expands') isOpen = isAttendanceExpandsOpen;
+              else if (item.name === 'Device Management') isOpen = isDeviceManagementOpen;
               
               const toggleOpen = () => {
                 if (item.name === 'Admin Control Panel') {
@@ -295,6 +312,8 @@ function DashboardLayout() {
                   setIsAttendancePanelOpen(!isAttendancePanelOpen);
                 } else if (item.name === 'Attendance Expands') {
                   setIsAttendanceExpandsOpen(!isAttendanceExpandsOpen);
+                } else if (item.name === 'Device Management') {
+                  setIsDeviceManagementOpen(!isDeviceManagementOpen);
                 }
               };
 
