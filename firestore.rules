@@ -26,6 +26,13 @@ rules_version = '2';
 //     - READ: Exclusive to Admins.
 //     - CREATE: Exclusive to Admins.
 //     - UPDATE/DELETE: Blocked entirely (immutable ledger).
+//
+// [x] /devices/{deviceId} collection rules:
+//     - READ/WRITE: Exclusive to Admins (PWA context).
+//
+// [x] /biometrics/{userId} collection rules:
+//     - READ: Restricted to Admins.
+//     - WRITE: Owner or Admin.
 // =========================================================================
 
 service cloud.firestore {
@@ -87,6 +94,17 @@ service cloud.firestore {
       );
       allow update: if false;
       allow delete: if isAdmin();
+    }
+
+    // Rules for devices collection
+    match /devices/{deviceId} {
+      allow read, write: if isAdmin();
+    }
+
+    // Rules for sensitive biometrics collection (templates and IDs)
+    match /biometrics/{userId} {
+      allow read: if isAdmin();
+      allow write: if isSignedIn() && (request.auth.uid == userId || isAdmin());
     }
   }
 }

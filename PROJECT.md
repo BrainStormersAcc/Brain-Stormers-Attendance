@@ -99,6 +99,20 @@ Tracks all manual creations, adjustments, or soft-deletions of attendance record
 *   `previousData` (map/object or null): Snapshot of the attendance document *before* the change (null for `"create"`).
 *   `newData` (map/object or null): Snapshot of the attendance document *after* the change (null for `"delete"`).
 
+#### `devices` (Collection)
+Stores fingerprint device registrations and their SDK license keys.
+
+*   `deviceName` (string): A human-readable label Admin assigns (e.g., `"Reception PC Scanner"`).
+*   `licenseKey` (string): The ZKFinger SDK License/Activation Key.
+    > [!WARNING]
+    > **Sensitive Data Warning:**
+    > The `licenseKey` is highly sensitive credential data. Treat this collection with the same care as any credential storage: never log the raw key value to the console in production code, and never expose it in any publicly shared screenshot or error message.
+*   `active` (boolean): Default `true`. Allows Admin to deactivate a device's key without deleting the record entirely (e.g., if a PC is decommissioned).
+*   `registeredBy` (string): Admin's UID who added this device.
+*   `registeredByName` (string): Admin's display name.
+*   `createdAt` (timestamp): Server-side timestamp indicating when the device was registered.
+*   `lastFetchedAt` (timestamp or null): Updated whenever a desktop app successfully fetches this key (useful to show "last seen" information).
+
 ---
 
 ### B. Database Security Rules (CRITICAL)
@@ -116,7 +130,10 @@ Key security controls enforced:
     *   **Update:** Staff can only update their own records and are strictly restricted to modifying the `checkOut` and `status` fields (using the rules `diff().affectedKeys()` validation). Admins can update any field.
     *   **Delete:** Restricted exclusively to users with the `"admin"` role.
 4.  **Role Verification Helper:** Rules utilize a reusable `isAdmin()` lookup that reads `/users/$(request.auth.uid)` to verify roles securely.
-5.  **UX vs. Security Boundary:** 
+5.  **Device Registry Security (`/devices/{deviceId}`):**
+    *   **Read/Write (Create, Update, Delete):** Restricted exclusively to users with the `"admin"` role. Staff members are blocked from reading or writing to this collection entirely.
+    *   *Note on Desktop App:* The standalone desktop application (using Node.js/Electron with the Firebase Admin SDK) executes in a privileged environment with trusted server credentials, bypassing these rules to fetch keys securely.
+6.  **UX vs. Security Boundary:** 
     > [!IMPORTANT]
     > Client-side checks (e.g., hiding buttons or blocking paths in React Router) are for **UX only**. Real data protection happens in `firestore.rules`. Never rely on frontend logic to secure the database.
 
@@ -220,6 +237,30 @@ To prevent collusive check-in behaviors or self-correction window gaming since S
    - **Edits Right Before Window Expiry**: Scans `self-edit` logs and flags adjustments completed in the final 60 seconds (remaining seconds < 60s) of the 10-minute correction window.
 3. **Interactive Drilldown**: Each flagged list item or row is expandable. Clicking it lists all related audit logs. Each log in the list can be further expanded to show the side-by-side values difference comparison comparison table.
 4. **Date Filtering**: Includes a top-level Date Range filter (defaulting to the last 30 days) that instantly recalculates all metrics and lists client-side.
+
+---
+
+## 7.6 Device Management Module (Specs)
+
+The "Device Management" module is an administrative dashboard accessible at `/device-management` for registering fingerprint scanning devices and caching their active SDK license keys centrally.
+
+### A. Role-Based Gating
+- **Admin-Only Page:** Protected at the React routing level via `<ProtectedRoute requiredRole="admin">` and at the navigation level in `DashboardLayout.jsx`. 
+- **Visibility:** The entire "Device Management" section in the sidebar remains completely hidden and unreachable for standard Staff members.
+
+### B. Core Features & User Workflows
+1. **Device Registry Form:**
+   - Housed inside a raised Neumorphic card (`NeuCard`).
+   - Fields: **Scanner Name** (friendly name assigned by Admin, e.g., `"Reception PC Scanner"`), **SDK License Key** (sensitive text), and **Portal Access Toggles** (enable/disable for Staff and Teacher portals using Neumorphic sliding toggles).
+   - **Masking Eye Toggle:** The license input field defaults to a masked password-style type. A Neumorphic reveal toggle button allows Admins to inspect the entered key safely before submitting.
+2. **Devices Inventory Table:**
+   - Displays all registered device records sorted chronologically.
+   - **Key Protection (Masking):** By default, keys are partially masked (e.g. `ZKF1••••••••89AB`) to prevent visual key snooping.
+   - **Timed Reveal Handler:** Clicking the reveal icon unmasks the key, with an automatic 5-second re-masking timeout.
+   - **Portal Toggles:** Renders two sliding toggle switches (**Staff Portal** and **Teacher Portal**). Toggling a switch directly updates the database to activate/deactivate the scanner's sync privilege for that group.
+3. **Registry Actions:**
+   - **Edit Registration:** Opens a pre-filled popup modal inside the Neumorphic environment, allowing modifications to the name, key, and portal toggles.
+   - **Delete Registration:** Removes the device profile completely from Firestore, guarded by a standard validation confirmation prompt.
 
 ---
 

@@ -57,6 +57,13 @@ function DashboardLayout() {
     return location.pathname.startsWith('/device-management');
   });
 
+  // Biometric Confirmation Modal states
+  const [scannedUser, setScannedUser] = useState(null);
+  const [existingAttendance, setExistingAttendance] = useState(null);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [submittingCheckin, setSubmittingCheckin] = useState(false);
+  const [checkinSuccess, setCheckinSuccess] = useState(false);
+
   useEffect(() => {
     if (['/admin-settings', '/staff-management'].includes(location.pathname)) {
       setIsAdminPanelOpen(true);
@@ -79,6 +86,251 @@ function DashboardLayout() {
     }, 2000); // 2 seconds transition duration
     return () => clearTimeout(timer);
   }, [location.pathname]);
+
+  useEffect(() => {
+    if (window.settingsAPI) {
+      // Listen to requests for active devices from the settings panel
+      window.settingsAPI.onGetActiveDevices(async () => {
+        try {
+          const { collection, getDocs, query, where } = await import('firebase/firestore');
+          const { db } = await import('../../config/firebase.js');
+          
+          const devicesRef = collection(db, 'devices');
+          const q = query(devicesRef, where('forStaff', '==', true));
+          const querySnapshot = await getDocs(q);
+          
+          const activeDevices = [];
+          querySnapshot.forEach(doc => {
+            activeDevices.push({ id: doc.id, ...doc.data() });
+          });
+          
+          window.settingsAPI.respondActiveDevices(activeDevices);
+        } catch (err) {
+          console.error("Error responding to active devices request:", err);
+          window.settingsAPI.respondActiveDevicesError(err.message);
+        }
+      });
+
+      // Listen to when a device key has been fetched and saved locally
+      window.settingsAPI.onDeviceActivated(async (deviceId) => {
+        try {
+          const { doc, updateDoc, serverTimestamp } = await import('firebase/firestore');
+          const { db } = await import('../../config/firebase.js');
+          
+          const deviceDocRef = doc(db, 'devices', deviceId);
+          await updateDoc(deviceDocRef, {
+            lastFetchedAt: serverTimestamp()
+          });
+          console.log(`[Electron Sync] Updated lastFetchedAt for device: ${deviceId}`);
+        } catch (err) {
+          console.error("Failed to update lastFetchedAt for activated device:", err);
+        }
+      });
+
+      // Listen to request for mock scan test staff (Ctrl+Shift+F simulation trigger)
+      window.settingsAPI.onGetTestStaff(async () => {
+        try {
+          const { collection, getDocs, query, limit } = await import('firebase/firestore');
+          const { db } = await import('../../config/firebase.js');
+          
+          // Get the first active staff user in the system to simulate scan matching
+          const usersRef = collection(db, 'users');
+          const q = query(usersRef, limit(5));
+          const querySnapshot = await getDocs(q);
+          
+          let staffUser = null;
+          querySnapshot.forEach(doc => {
+            const data = doc.data();
+            if (!staffUser && data.role === 'staff') {
+              staffUser = { uid: doc.id, ...data };
+            }
+          });
+
+          // Fallback to any user if no 'staff' role is found
+          if (!staffUser) {
+            querySnapshot.forEach(doc => {
+              if (!staffUser) {
+                staffUser = { uid: doc.id, ...doc.data() };
+              }
+            });
+          }
+          
+          if (staffUser) {
+            window.settingsAPI.sendTestStaff(staffUser);
+          } else {
+            window.settingsAPI.sendTestStaffError("No registered users found to simulate fingerprint scanning.");
+          }
+        } catch (err) {
+          console.error("Failed to query test staff:", err);
+          window.settingsAPI.sendTestStaffError(err.message);
+        }
+      });
+
+      // Listen for matched fingerprint scan event from main process
+      window.settingsAPI.onFingerprintScanned(async (staffData) => {
+        console.log("[PWA Bridge] Received fingerprint scan match:", staffData);
+        try {
+          const { collection, getDocs, query, where } = await import('firebase/firestore');
+          const { db } = await import('../../config/firebase.js');
+          
+          const todayObj = new Date();
+          const yyyy = todayObj.getFullYear();
+          const mm = String(todayObj.getMonth() + 1).padStart(2, '0');
+          const dd = String(todayObj.getDate()).padStart(2, '0');
+          const dateString = `${yyyy}-${mm}-${dd}`;
+          
+          const attendanceRef = collection(db, 'attendance');
+          const q = query(
+            attendanceRef, 
+            where('userId', '==', staffData.uid),
+            where('date', '==', dateString),
+            where('isDeleted', '==', false)
+          );
+          const snapshot = await getDocs(q);
+          
+          let existingLog = null;
+          snapshot.forEach(doc => {
+            existingLog = { id: doc.id, ...doc.data() };
+          });
+          
+          setScannedUser(staffData);
+          setExistingAttendance(existingLog);
+          setModalOpen(true);
+        } catch (err) {
+          console.error("Failed to check existing attendance log:", err);
+          setScannedUser(staffData);
+          setExistingAttendance(null);
+          setModalOpen(true);
+        }
+      });
+    }
+  }, []);
+
+  const handleCloseBiometricModal = () => {
+    setModalOpen(false);
+    setScannedUser(null);
+    setExistingAttendance(null);
+    setCheckinSuccess(false);
+  };
+
+  const handleConfirmFingerprintCheckin = async () => {
+    if (!scannedUser || submittingCheckin) return;
+    
+    setSubmittingCheckin(true);
+    try {
+      const { doc, collection, writeBatch, serverTimestamp } = await import('firebase/firestore');
+      const { db } = await import('../../config/firebase.js');
+      
+      const todayObj = new Date();
+      const yyyy = todayObj.getFullYear();
+      const mm = String(todayObj.getMonth() + 1).padStart(2, '0');
+      const dd = String(todayObj.getDate()).padStart(2, '0');
+      const dateString = `${yyyy}-${mm}-${dd}`;
+      
+      const batch = writeBatch(db);
+      
+      if (existingAttendance) {
+        // Perform CHECK-OUT
+        const attendanceRef = doc(db, 'attendance', existingAttendance.id);
+        const checkOutUpdate = {
+          checkOut: new Date(),
+          status: 'Present',
+          lastEditedBy: 'fingerprint-scanner',
+          lastEditedAt: serverTimestamp()
+        };
+        
+        batch.update(attendanceRef, checkOutUpdate);
+        
+        // Write audit log
+        const auditLogRef = doc(collection(db, 'auditLogs'));
+        batch.set(auditLogRef, {
+          action: 'update',
+          targetCollection: 'attendance',
+          targetDocId: existingAttendance.id,
+          performedBy: 'fingerprint-scanner',
+          performedByName: 'Biometric Scanner Station',
+          timestamp: serverTimestamp(),
+          reason: 'Fingerprint check-out verified',
+          previousData: existingAttendance,
+          newData: { ...existingAttendance, ...checkOutUpdate }
+        });
+        
+      } else {
+        // Perform CHECK-IN
+        const attendanceRef = doc(collection(db, 'attendance'));
+        const attendanceId = attendanceRef.id;
+        
+        const newAttendanceData = {
+          userId: scannedUser.uid,
+          role: scannedUser.role || 'staff',
+          date: dateString,
+          checkIn: new Date(),
+          checkOut: null,
+          status: 'Present',
+          markedBy: 'fingerprint',
+          isDeleted: false,
+          createdAt: serverTimestamp(),
+          markedByUserId: 'fingerprint-scanner'
+        };
+        
+        batch.set(attendanceRef, newAttendanceData);
+        
+        // Write audit log
+        const auditLogRef = doc(collection(db, 'auditLogs'));
+        batch.set(auditLogRef, {
+          action: 'create',
+          targetCollection: 'attendance',
+          targetDocId: attendanceId,
+          performedBy: 'fingerprint-scanner',
+          performedByName: 'Biometric Scanner Station',
+          timestamp: serverTimestamp(),
+          reason: 'Fingerprint check-in verified',
+          previousData: null,
+          newData: newAttendanceData
+        });
+      }
+      
+      await batch.commit();
+      
+      // Update local fetch trigger to sync connection log
+      if (window.settingsAPI) {
+        window.settingsAPI.saveLocalSettings({
+          deviceId: 'local-sync-station',
+          deviceName: 'Biometric Scanner Station',
+          licenseKey: 'LOCAL_SYNC_STATION',
+          lastSyncedAt: new Date().toISOString()
+        });
+      }
+      
+      setCheckinSuccess(true);
+      setTimeout(() => {
+        handleCloseBiometricModal();
+      }, 3000);
+      
+    } catch (err) {
+      console.error("Biometric check-in database save error:", err);
+      alert(`Database error saving attendance: ${err.message}`);
+    } finally {
+      setSubmittingCheckin(false);
+    }
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (!modalOpen) return;
+      if (e.key === 'Enter') {
+        if (existingAttendance && existingAttendance.checkOut) return;
+        handleConfirmFingerprintCheckin();
+        e.preventDefault();
+      } else if (e.key === 'Escape') {
+        handleCloseBiometricModal();
+        e.preventDefault();
+      }
+    };
+    
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [modalOpen, scannedUser, existingAttendance, submittingCheckin]);
 
   const getLoaderType = () => {
     const path = location.pathname;
@@ -239,7 +491,7 @@ function DashboardLayout() {
       isGroup: true,
       icon: Cpu,
       subItems: [
-        { name: 'Device List (Under Development)', path: '#', icon: Smartphone, underConstruction: true }
+        { name: 'Scanner List', path: '/device-management', icon: Smartphone }
       ]
     }
   ].filter(Boolean);
@@ -1047,6 +1299,197 @@ function DashboardLayout() {
                 )}
               </NeuButton>
             </div>
+          </NeuCard>
+        </div>
+      )}
+
+      {/* Fingerprint Scan Confirmation Modal */}
+      {modalOpen && scannedUser && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.45)',
+          backdropFilter: 'blur(8px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999,
+          animation: 'fadeIn 0.2s ease-out'
+        }}>
+          <NeuCard variant="raised" style={{
+            padding: '40px',
+            width: '90%',
+            maxWidth: '460px',
+            position: 'relative',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '24px',
+            boxShadow: 'var(--neu-shadow-raised)'
+          }}>
+            {/* Close Button */}
+            <button
+              onClick={handleCloseBiometricModal}
+              disabled={submittingCheckin}
+              style={{
+                position: 'absolute',
+                top: '20px',
+                right: '20px',
+                background: 'none',
+                border: 'none',
+                color: 'var(--text-muted)',
+                cursor: 'pointer',
+                padding: '4px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}
+            >
+              <X size={20} />
+            </button>
+
+            {/* Modal Title */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <Cpu size={24} style={{ color: 'var(--color-primary)' }} />
+              <h2 style={{ margin: 0, fontSize: '1.4rem', fontFamily: 'var(--font-display)', fontWeight: 700 }}>
+                Biometric Verification
+              </h2>
+            </div>
+
+            {/* Success state check */}
+            {checkinSuccess ? (
+              <div style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '16px',
+                padding: '24px 0'
+              }}>
+                <div style={{
+                  width: '64px',
+                  height: '64px',
+                  borderRadius: '50%',
+                  backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                  border: '2px solid var(--color-success)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: 'var(--color-success)',
+                  boxShadow: '0 0 16px rgba(16, 185, 129, 0.3)'
+                }}>
+                  <Check size={36} strokeWidth={3} />
+                </div>
+                <h3 style={{ margin: 0, fontSize: '1.2rem', color: 'var(--color-success)', textAlign: 'center' }}>
+                  Attendance Saved Successfully
+                </h3>
+                <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--text-secondary)', textAlign: 'center' }}>
+                  {scannedUser.name} has been marked {existingAttendance && !existingAttendance.checkOut ? 'OUT' : 'IN'}.
+                </p>
+              </div>
+            ) : (
+              <>
+                {/* User Bio Details */}
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '16px',
+                  backgroundColor: 'var(--bg-surface-elevated)',
+                  padding: '20px',
+                  borderRadius: '16px',
+                  boxShadow: 'var(--neu-shadow-pressed-sm)',
+                  border: '1px solid var(--border-color)'
+                }}>
+                  <div style={{
+                    width: '60px',
+                    height: '60px',
+                    borderRadius: '50%',
+                    backgroundColor: 'var(--bg-base)',
+                    boxShadow: 'var(--neu-shadow-raised-sm)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '1.5rem'
+                  }}>
+                    {scannedUser.avatar || '👤'}
+                  </div>
+                  <div>
+                    <h3 style={{ margin: '0 0 4px 0', fontSize: '1.1rem', fontWeight: 600 }}>{scannedUser.name}</h3>
+                    <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-secondary)' }}>@{scannedUser.username}</p>
+                  </div>
+                </div>
+
+                {/* Scan Time Details */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '0.9rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-secondary)' }}>
+                    <span>Current Date:</span>
+                    <strong style={{ color: 'var(--text-primary)' }}>{new Date().toLocaleDateString(undefined, { dateStyle: 'long' })}</strong>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-secondary)' }}>
+                    <span>Scan Time:</span>
+                    <strong style={{ color: 'var(--text-primary)' }}>{new Date().toLocaleTimeString(undefined, { timeStyle: 'short' })}</strong>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-secondary)' }}>
+                    <span>Action:</span>
+                    <span style={{
+                      fontWeight: 700,
+                      color: existingAttendance 
+                        ? (existingAttendance.checkOut ? 'var(--text-muted)' : 'var(--color-danger)') 
+                        : 'var(--color-success)'
+                    }}>
+                      {existingAttendance 
+                        ? (existingAttendance.checkOut ? 'Already Completed' : 'Check-Out (Exit)') 
+                        : 'Check-In (Entry)'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Notice message */}
+                {existingAttendance && existingAttendance.checkOut && (
+                  <div style={{
+                    padding: '12px',
+                    borderRadius: '12px',
+                    backgroundColor: 'rgba(239, 68, 68, 0.05)',
+                    border: '1px solid rgba(239, 68, 68, 0.15)',
+                    color: 'var(--text-secondary)',
+                    fontSize: '0.8rem',
+                    textAlign: 'center'
+                  }}>
+                    This user has already completed checking in and out for today.
+                  </div>
+                )}
+
+                {/* Confirm/Cancel Action Buttons */}
+                <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
+                  <NeuButton
+                    type="button"
+                    onClick={handleCloseBiometricModal}
+                    disabled={submittingCheckin}
+                    style={{ flex: 1, display: 'flex', justifyContent: 'center' }}
+                  >
+                    Cancel
+                  </NeuButton>
+                  
+                  <NeuButton
+                    type="button"
+                    variant="accent"
+                    onClick={handleConfirmFingerprintCheckin}
+                    disabled={submittingCheckin || (existingAttendance && existingAttendance.checkOut)}
+                    autoFocus
+                    style={{
+                      flex: 1,
+                      display: 'flex',
+                      justifyContent: 'center',
+                      boxShadow: 'var(--neu-shadow-raised)'
+                    }}
+                  >
+                    {submittingCheckin ? 'Submitting...' : 'Confirm'}
+                  </NeuButton>
+                </div>
+              </>
+            )}
           </NeuCard>
         </div>
       )}

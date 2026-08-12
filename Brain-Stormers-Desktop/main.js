@@ -1,10 +1,93 @@
-const { app, BrowserWindow, Menu } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const http = require('http');
 
 let mainWindow;
+let settingsWindow;
 let staticServer;
+
+const SETTINGS_FILE = path.join(app.getPath('userData'), 'device-settings.json');
+
+// Helper to get local cached settings
+function getLocalSettings() {
+  if (fs.existsSync(SETTINGS_FILE)) {
+    try {
+      return JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8'));
+    } catch (e) {
+      console.error('Failed to parse local device settings:', e);
+      return {};
+    }
+  }
+  return {};
+}
+
+// Helper to save settings locally
+function saveLocalSettings(settings) {
+  try {
+    fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2), 'utf8');
+    console.log('Successfully saved device settings locally to:', SETTINGS_FILE);
+    
+    // Notify PWA that the device was activated so it can update lastFetchedAt
+    if (mainWindow) {
+      mainWindow.webContents.send('device-activated', settings.deviceId);
+    }
+    
+    // Initialize/sync mock ZKFinger SDK with the new key!
+    initializeZKFingerSDK(settings.licenseKey, settings.deviceName);
+  } catch (e) {
+    console.error('Failed to write local device settings:', e);
+  }
+}
+
+// ZKFinger SDK Initialization Mock
+function initializeZKFingerSDK(licenseKey, deviceName) {
+  if (!licenseKey) {
+    console.log('[ZKFinger SDK] No local license key cached yet. Please configure it in settings.');
+    return false;
+  }
+  console.log('================================================================');
+  console.log('[ZKFinger SDK] Initializing biometric hardware scanner...');
+  console.log(`[ZKFinger SDK] Target Device: "${deviceName}"`);
+  console.log(`[ZKFinger SDK] License Key Loaded: "${licenseKey.substring(0, 4)}••••${licenseKey.substring(licenseKey.length - 4)}"`);
+  console.log('[ZKFinger SDK] Biometric matching engine initialized successfully.');
+  console.log('================================================================');
+  return true;
+}
+
+// Read and parse environmental variables
+function getFirebaseConfigFromEnv() {
+  const envPath = path.join(__dirname, '../.env');
+  if (!fs.existsSync(envPath)) {
+    console.error('Could not find .env file at:', envPath);
+    return {};
+  }
+  
+  const envText = fs.readFileSync(envPath, 'utf8');
+  const config = {};
+  
+  envText.split('\n').forEach(line => {
+    const match = line.match(/^\s*([\w.-]+)\s*=\s*(.*)?\s*$/);
+    if (match) {
+      const key = match[1];
+      let value = match[2] || '';
+      if (value.length > 0 && value.charAt(0) === '"' && value.charAt(value.length - 1) === '"') {
+        value = value.substring(1, value.length - 1);
+      }
+      config[key] = value.trim();
+    }
+  });
+
+  return {
+    apiKey: config.VITE_FIREBASE_API_KEY,
+    authDomain: config.VITE_FIREBASE_AUTH_DOMAIN,
+    projectId: config.VITE_FIREBASE_PROJECT_ID,
+    storageBucket: config.VITE_FIREBASE_STORAGE_BUCKET,
+    messagingSenderId: config.VITE_FIREBASE_MESSAGING_SENDER_ID,
+    appId: config.VITE_FIREBASE_APP_ID,
+    measurementId: config.VITE_FIREBASE_MEASUREMENT_ID
+  };
+}
 
 const DIST_DIR = path.join(__dirname, '../dist');
 const INDEX_HTML_PATH = path.join(DIST_DIR, 'index.html');
@@ -113,6 +196,7 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
+      preload: path.join(__dirname, 'preload.js'),
       devTools: !app.isPackaged // devTools available in dev mode, disabled in production packages
     }
   });
@@ -122,7 +206,7 @@ function createWindow() {
     event.preventDefault();
   });
 
-  // Register local keyboard shortcuts for Refresh (Ctrl+R) and Hard Refresh (Ctrl+Shift+R)
+  // Register local keyboard shortcuts for Refresh (Ctrl+R), Hard Refresh (Ctrl+Shift+R), Settings (Ctrl+Shift+S) and Mock Scan (Ctrl+Shift+F)
   mainWindow.webContents.on('before-input-event', (event, input) => {
     if (input.type === 'keyDown' && input.control && input.key.toLowerCase() === 'r') {
       if (input.shift) {
@@ -131,6 +215,22 @@ function createWindow() {
       } else {
         console.log('Performing standard reload...');
         mainWindow.webContents.reload();
+      }
+      event.preventDefault();
+    }
+
+    // Ctrl + Shift + S opens settings panel
+    if (input.type === 'keyDown' && input.control && input.shift && input.key.toLowerCase() === 's') {
+      console.log('Opening device activation settings...');
+      createSettingsWindow();
+      event.preventDefault();
+    }
+
+    // Ctrl + Shift + F simulates a fingerprint scan touch
+    if (input.type === 'keyDown' && input.control && input.shift && input.key.toLowerCase() === 'f') {
+      console.log('Simulating fingerprint scanner touch...');
+      if (mainWindow) {
+        mainWindow.webContents.send('get-test-staff');
       }
       event.preventDefault();
     }
@@ -146,6 +246,10 @@ function createWindow() {
   // 2. Load splash loading page first
   mainWindow.loadFile(path.join(__dirname, 'index.html'));
 
+  // 4. Initialize ZKFinger SDK mock with local cached settings
+  const localSettings = getLocalSettings();
+  initializeZKFingerSDK(localSettings.licenseKey, localSettings.deviceName);
+
   // 3. Start local HTTP server to host dist/ and bypass file:// protocol issues
   startLocalServer((port) => {
     // Transition after 1.5 seconds splash intro
@@ -157,6 +261,102 @@ function createWindow() {
     }, 1500);
   });
 }
+
+function createSettingsWindow() {
+  if (settingsWindow) {
+    settingsWindow.focus();
+    return;
+  }
+
+  settingsWindow = new BrowserWindow({
+    width: 480,
+    height: 480,
+    resizable: false,
+    title: "Device Activation Settings",
+    icon: fs.existsSync(appIconPath) ? appIconPath : undefined,
+    parent: mainWindow,
+    modal: true,
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      preload: path.join(__dirname, 'preload.js')
+    }
+  });
+
+  settingsWindow.setMenu(null);
+  settingsWindow.loadFile(path.join(__dirname, 'settings.html'));
+
+  settingsWindow.on('closed', () => {
+    settingsWindow = null;
+  });
+}
+
+// Register IPC handlers for settings API
+ipcMain.handle('get-firebase-config', () => {
+  return getFirebaseConfigFromEnv();
+});
+
+ipcMain.handle('get-local-settings', () => {
+  return getLocalSettings();
+});
+
+ipcMain.handle('save-local-settings', (event, settings) => {
+  saveLocalSettings(settings);
+  return { success: true };
+});
+
+ipcMain.on('close-settings-window', () => {
+  if (settingsWindow) {
+    settingsWindow.close();
+  }
+});
+
+let pendingDevicesPromise = null;
+
+ipcMain.handle('request-devices', async () => {
+  if (!mainWindow) {
+    throw new Error('Main window is not available.');
+  }
+  
+  return new Promise((resolve, reject) => {
+    pendingDevicesPromise = { resolve, reject };
+    // Tell PWA to fetch the devices using its active session
+    mainWindow.webContents.send('get-active-devices');
+    
+    // Safety timeout: reject after 10 seconds if PWA doesn't respond
+    setTimeout(() => {
+      if (pendingDevicesPromise) {
+        pendingDevicesPromise.reject(new Error('Timeout fetching devices from PWA. Make sure you are logged in.'));
+        pendingDevicesPromise = null;
+      }
+    }, 10000);
+  });
+});
+
+ipcMain.on('respond-active-devices', (event, devices) => {
+  if (pendingDevicesPromise) {
+    pendingDevicesPromise.resolve(devices);
+    pendingDevicesPromise = null;
+  }
+});
+
+ipcMain.on('respond-active-devices-error', (event, error) => {
+  if (pendingDevicesPromise) {
+    pendingDevicesPromise.reject(new Error(error));
+    pendingDevicesPromise = null;
+  }
+});
+
+ipcMain.on('respond-test-staff', (event, staffData) => {
+  console.log('[Fingerprint Bridge] Match found for staff:', staffData.name);
+  if (mainWindow) {
+    mainWindow.webContents.send('fingerprint-scanned', staffData);
+  }
+});
+
+ipcMain.on('respond-test-staff-error', (event, error) => {
+  console.error('[Fingerprint Bridge] Simulation failed to fetch test staff:', error);
+});
 
 app.whenReady().then(() => {
   createWindow();

@@ -12,6 +12,7 @@ import StyleGuide from './pages/StyleGuide';
 
 // Module Pages
 import StaffDashboard from './modules/staff-attendance/pages/StaffDashboard';
+import DeviceList from './modules/device-management/pages/DeviceList';
 
 // Route Protection and Modal
 import ProtectedRoute from './shared/components/ProtectedRoute.jsx';
@@ -80,6 +81,14 @@ function App() {
             element={
               <ProtectedRoute requiredRole="admin">
                 <MisuseMonitoring />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="device-management" 
+            element={
+              <ProtectedRoute requiredRole="admin">
+                <DeviceList />
               </ProtectedRoute>
             } 
           />

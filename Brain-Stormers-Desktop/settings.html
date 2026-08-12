@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Device Activation Settings</title>
+  <style>
+    :root {
+      --bg-base: #1c1f26;
+      --bg-surface: #1c1f26;
+      --bg-surface-elevated: #242932;
+      --text-primary: #e2e8f0;
+      --text-secondary: #94a3b8;
+      --text-muted: #64748b;
+      --color-primary: #3b82f6;
+      --color-success: #10b981;
+      --color-danger: #ef4444;
+      --border-color: rgba(255, 255, 255, 0.03);
+      
+      --color-shadow-light: #252932;
+      --color-shadow-dark: #13151a;
+      --neu-shadow-raised: -8px -8px 16px var(--color-shadow-light), 8px 8px 16px var(--color-shadow-dark);
+      --neu-shadow-pressed: inset -4px -4px 8px var(--color-shadow-light), inset 4px 4px 8px var(--color-shadow-dark);
+    }
+    
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background-color: var(--bg-base);
+      color: var(--text-primary);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      margin: 0;
+      padding: 20px;
+      box-sizing: border-box;
+      overflow: hidden;
+    }
+    
+    .card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-color);
+      border-radius: 24px;
+      box-shadow: var(--neu-shadow-raised);
+      padding: 32px;
+      width: 100%;
+      max-width: 440px;
+      box-sizing: border-box;
+    }
+    
+    h2 {
+      font-size: 1.25rem;
+      margin: 0 0 8px 0;
+      font-weight: 700;
+      letter-spacing: 0.01em;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .desc {
+      color: var(--text-secondary);
+      font-size: 0.85rem;
+      margin-bottom: 24px;
+      line-height: 1.5;
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-bottom: 20px;
+    }
+
+    label {
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--text-secondary);
+      letter-spacing: 0.02em;
+    }
+
+    select {
+      width: 100%;
+      padding: 12px 16px;
+      background: var(--bg-surface);
+      color: var(--text-primary);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      box-shadow: var(--neu-shadow-pressed);
+      font-size: 0.95rem;
+      outline: none;
+      box-sizing: border-box;
+      appearance: none;
+    }
+
+    .select-wrapper {
+      position: relative;
+    }
+
+    .select-wrapper::after {
+      content: '▼';
+      font-size: 0.7rem;
+      color: var(--text-muted);
+      position: absolute;
+      right: 16px;
+      top: 50%;
+      transform: translateY(-50%);
+      pointer-events: none;
+    }
+
+    .status-alert {
+      padding: 12px 16px;
+      border-radius: 12px;
+      font-size: 0.85rem;
+      line-height: 1.4;
+      margin-bottom: 20px;
+      display: none;
+    }
+
+    .status-success {
+      background: rgba(16, 185, 129, 0.1);
+      border: 1px solid rgba(16, 185, 129, 0.2);
+      color: var(--color-success);
+    }
+
+    .status-error {
+      background: rgba(239, 68, 68, 0.1);
+      border: 1px solid rgba(239, 68, 68, 0.2);
+      color: var(--color-danger);
+    }
+
+    .btn-group {
+      display: flex;
+      gap: 12px;
+      margin-top: 24px;
+    }
+
+    button {
+      flex: 1;
+      padding: 12px;
+      border-radius: 12px;
+      border: 1px solid var(--border-color);
+      background: var(--bg-surface);
+      color: var(--text-primary);
+      font-weight: 600;
+      font-size: 0.9rem;
+      cursor: pointer;
+      box-shadow: var(--neu-shadow-raised);
+      transition: all 0.2s ease;
+      outline: none;
+    }
+
+    button:active {
+      box-shadow: var(--neu-shadow-pressed);
+    }
+
+    button.accent {
+      background: var(--bg-surface-elevated);
+      color: var(--color-primary);
+      border: 1px solid rgba(59, 130, 246, 0.15);
+    }
+
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      box-shadow: none !important;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>⚙️ Biometric Settings</h2>
+    <p class="desc">Sync and load central ZKFinger license keys to authenticate this PC's hardware module.</p>
+    
+    <div id="alertBox" class="status-alert"></div>
+
+    <div class="form-group">
+      <label for="deviceSelect">Select Registered PC Scanner</label>
+      <div class="select-wrapper">
+        <select id="deviceSelect" disabled>
+          <option value="">Loading registered devices...</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="btn-group">
+      <button type="button" id="cancelBtn">Cancel</button>
+      <button type="button" id="refreshBtn" class="accent">Fetch Devices</button>
+      <button type="button" id="saveBtn" disabled>Save</button>
+    </div>
+  </div>
+
+  <script>
+    let fetchedDevices = [];
+    let savedSettings = {};
+
+    const selectEl = document.getElementById('deviceSelect');
+    const saveBtn = document.getElementById('saveBtn');
+    const refreshBtn = document.getElementById('refreshBtn');
+    const cancelBtn = document.getElementById('cancelBtn');
+    const alertBox = document.getElementById('alertBox');
+
+    // Show status logs
+    const showMessage = (msg, isError = false) => {
+      alertBox.textContent = msg;
+      alertBox.className = `status-alert ${isError ? 'status-error' : 'status-success'}`;
+      alertBox.style.display = 'block';
+    };
+
+    const hideMessage = () => {
+      alertBox.style.display = 'none';
+    };
+
+    // Load active devices list via PWA authenticated bridge
+    const loadDevices = async () => {
+      selectEl.disabled = true;
+      saveBtn.disabled = true;
+      refreshBtn.disabled = true;
+      selectEl.innerHTML = '<option value="">Searching for devices...</option>';
+      hideMessage();
+
+      try {
+        // Call the secure PWA bridge
+        fetchedDevices = await window.settingsAPI.requestDevices();
+
+        if (!fetchedDevices || fetchedDevices.length === 0) {
+          selectEl.innerHTML = '<option value="">No devices registered centrally</option>';
+          showMessage("No active devices found. Make sure you are registered and logged in as Admin in the main window.", true);
+          refreshBtn.disabled = false;
+          return;
+        }
+
+        // Populating dropdown
+        selectEl.innerHTML = '<option value="">-- Choose registered device name --</option>';
+        fetchedDevices.forEach(device => {
+          const option = document.createElement('option');
+          option.value = device.id;
+          option.textContent = device.deviceName;
+          if (savedSettings.deviceId === device.id) {
+            option.selected = true;
+          }
+          selectEl.appendChild(option);
+        });
+
+        selectEl.disabled = false;
+        refreshBtn.disabled = false;
+        if (selectEl.value) saveBtn.disabled = false;
+      } catch (err) {
+        console.error("Fetch devices failure:", err);
+        selectEl.innerHTML = '<option value="">Failed to fetch devices</option>';
+        showMessage("Failed to sync devices. Note: You must log into the Admin panel in the main window before syncing.", true);
+        refreshBtn.disabled = false;
+      }
+    };
+
+    // Enable/disable Save button on dropdown change
+    selectEl.addEventListener('change', () => {
+      saveBtn.disabled = !selectEl.value;
+    });
+
+    // Cancel / close settings window
+    cancelBtn.addEventListener('click', () => {
+      window.settingsAPI.closeSettingsWindow();
+    });
+
+    // Refresh devices list
+    refreshBtn.addEventListener('click', async () => {
+      await loadDevices();
+    });
+
+    // Save selected device settings
+    saveBtn.addEventListener('click', async () => {
+      const selectedId = selectEl.value;
+      const device = fetchedDevices.find(d => d.id === selectedId);
+      
+      if (!device) return;
+
+      saveBtn.disabled = true;
+      selectEl.disabled = true;
+      refreshBtn.disabled = true;
+      showMessage("Saving settings and activating device...");
+
+      try {
+        // Save settings to local userData file via Electron API (this triggers ZKFinger init and Firestore update)
+        await window.settingsAPI.saveLocalSettings({
+          deviceId: device.id,
+          deviceName: device.deviceName,
+          licenseKey: device.licenseKey,
+          lastSyncedAt: new Date().toISOString()
+        });
+
+        showMessage("Activation key successfully synchronized and cached!");
+        setTimeout(() => {
+          window.settingsAPI.closeSettingsWindow();
+        }, 1500);
+      } catch (err) {
+        console.error("Failed to save settings:", err);
+        showMessage("Failed to save settings.", true);
+        saveBtn.disabled = false;
+        selectEl.disabled = false;
+        refreshBtn.disabled = false;
+      }
+    });
+
+    // Startup flow
+    window.addEventListener('DOMContentLoaded', async () => {
+      // Load current local cached settings
+      try {
+        savedSettings = await window.settingsAPI.getLocalSettings() || {};
+      } catch (e) {
+        console.error("Local settings load failed:", e);
+      }
+
+      await loadDevices();
+    });
+  </script>
+</body>
+</html>
