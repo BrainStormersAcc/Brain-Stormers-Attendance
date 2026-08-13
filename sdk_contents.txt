@@ -1,0 +1,480 @@
+Scanning Desktop for ZKFinger SDK at: C:\Users\niaz\Desktop\Brain-Stormers\Scanning-Device\ZKFingerSDK_Windows_Standard
+
+📁 .svn/
+  📄 entries (0.0 KB)
+  📄 format (0.0 KB)
+  📁 pristine/
+    📁 00/
+      📄 009d35187101168484a80a3fea21e35386f96583.svn-base (27.2 KB)
+    📁 01/
+      📄 01115f6e52d8226d5d257820f0bc4d272fd9940d.svn-base (1.3 KB)
+    📁 03/
+      📄 03191fb2e3301f2bfe058082ebd93fa4df6d9241.svn-base (0.4 KB)
+      📄 03f88ad38385f046a2cdcda0363101da5b04b078.svn-base (379.2 KB)
+    📁 04/
+      📄 044733f5283a9e3c67264c9594e4a168bf0ddce6.svn-base (19.9 KB)
+    📁 08/
+      📄 08666bf972bc7d7870c2451c7c7b4ba82c465b27.svn-base (286.2 KB)
+      📄 089410787a646dfa98c6481dff7b20d230fe5a5c.svn-base (11.9 KB)
+      📄 08a238636717a2e808ef6bd2d5d65da8f16028c1.svn-base (3.5 KB)
+      📄 08f6963e2b9d8ceccb23aea12940bfc9c93e694f.svn-base (21.5 KB)
+    📁 09/
+      📄 09f8c33b31027874fe25cb8c8af1e8718c7d4684.svn-base (0.4 KB)
+    📁 0b/
+      📄 0b6a3da7bbadccde49d52648e6b2733a465b488e.svn-base (21.0 KB)
+    📁 0c/
+      📄 0cd600541528ba26a0a918d630ea8f33ad7aff5f.svn-base (0.9 KB)
+    📁 0d/
+      📄 0d21ca18092aca7653af378462fc89b1ebbfd6a6.svn-base (0.1 KB)
+      📄 0d21d443ff264b459ec8e493dbd108ce27e390c5.svn-base (59.0 KB)
+    📁 0f/
+      📄 0f054b294432c25f21813e30afaf838e3de7c268.svn-base (41.2 KB)
+    📁 12/
+      📄 12a7186f98d52a9238af05de51aa87c0733669c8.svn-base (6.8 KB)
+    📁 13/
+      📄 138e07f20308906f6c352e3999b1f0991d0ac0c4.svn-base (9.5 KB)
+    📁 16/
+      📄 168ed3677fc98b70ab6d3bf6b19bbeb024762cf3.svn-base (2.5 KB)
+      📄 16b079261c5820ae68e20767635f32eee7f0f563.svn-base (17.0 KB)
+    📁 17/
+      📄 1738f633fc4a9029a9b29c54a7d3fc9dfb4ca9cf.svn-base (0.6 KB)
+      📄 17618e32cd9fdeeaf7639d3dd9ad5e7ef11f89f4.svn-base (1.5 KB)
+      📄 17dba6596f62ac1d8f9c3606991efb3fed7a5329.svn-base (9.2 KB)
+    📁 1a/
+      📄 1a5867a33f688603622fbd2c157af3684dfcbb37.svn-base (0.2 KB)
+    📁 1d/
+      📄 1d2d5f778ebe9ab38a3c5362f91e29e462092c79.svn-base (1.7 KB)
+    📁 1f/
+      📄 1f484f4940496ef520bfcd9dcaa431f49d5164dd.svn-base (1.2 KB)
+    📁 20/
+      📄 208f4e422252846742f0b5d8c4b7282d072171ee.svn-base (1496.5 KB)
+    📁 21/
+      📄 217ea44815b11b249651e8a4b32a0af509e65346.svn-base (0.5 KB)
+    📁 23/
+      📄 23df5359cb4be745049260e830f092a67af145d8.svn-base (0.1 KB)
+    📁 25/
+      📄 2522b7959810647e8aaae784d085229ba36d6cd1.svn-base (8.3 KB)
+      📄 25afa5e51fb0c2c1a548c074cff01ba3ea61f24e.svn-base (1.3 KB)
+    📁 27/
+      📄 2758f11ff17d099e49811d364a6d9440beab14e8.svn-base (10.5 KB)
+    📁 28/
+      📄 285be713604ca4fefb033786cb509bd2ce2fce18.svn-base (1.1 KB)
+    📁 2d/
+      📄 2d1a9084d350d5ff884fc9b0dd7d9f7ebf766c9d.svn-base (0.5 KB)
+      📄 2d73bd586f59944a5bf9c0fd1a0039e7e43ce013.svn-base (0.5 KB)
+    📁 2e/
+      📄 2ee71940bf6ebf3347eb4cfad392fc2cb54b0b94.svn-base (6.2 KB)
+    📁 30/
+      📄 30873e5f0c2ba92e341296c973c31c9e67fe4f53.svn-base (11.2 KB)
+    📁 32/
+      📄 329f72fdc633cd7af68e1d2e04ee9583e4beff19.svn-base (2.6 KB)
+    📁 35/
+      📄 35a88d7fe51257aaecb4df343150e99ecd0e8c2d.svn-base (0.6 KB)
+      📄 35b362bdddc72a468f693fc1c392005a07affe2c.svn-base (1.0 KB)
+    📁 36/
+      📄 36aa1b45d69e6472102b5cda820fe26cc3ade5dd.svn-base (2.3 KB)
+      📄 36bb74f1722ac1050a88691ac8cd76bdacdec806.svn-base (10.8 KB)
+    📁 38/
+      📄 381425a6c8a7c5b4a1164d10177c0a28790d34b8.svn-base (0.8 KB)
+      📄 38dc8bfa1ab7637df6e1569000bfad613979a586.svn-base (0.8 KB)
+    📁 39/
+      📄 399f1c01597182742d4a1d196b11687a8904e4a2.svn-base (23.9 KB)
+    📁 3a/
+      📄 3acd4b0631e34baaa976443b7c0d080f02c392b4.svn-base (0.5 KB)
+    📁 3b/
+      📄 3b67ff8b1d8d4db2d99cc9209a69da74b8579f44.svn-base (1.6 KB)
+    📁 3e/
+      📄 3e49b451fcfbd3fa049380f7a036157584e94fe9.svn-base (1.1 KB)
+    📁 3f/
+      📄 3fd929332c4ab1c704bba7fd38e7d0fc702b9f47.svn-base (16.8 KB)
+      📄 3ff4f5cc1ce3a6f5c8faee29fb318c10b8a04a5e.svn-base (4.8 KB)
+    📁 43/
+      📄 43045f1b2357e13eb6ed128ace2e195ba3929a07.svn-base (4.0 KB)
+      📄 43c2b782393b6c378c861ae35f9f26c397069bbe.svn-base (3.2 KB)
+      📄 43e826c5dfe10c024f4825d5b2205f1690c6f495.svn-base (0.1 KB)
+    📁 44/
+      📄 4495e5c0991b229f9a554d7e237ca33f72f78e36.svn-base (32.0 KB)
+    📁 45/
+      📄 4536fc6adc45b6436802085f60bc71f1d5cdbaac.svn-base (16.7 KB)
+    📁 46/
+      📄 46baa592fca755e32160c0c5d57d5dd3ffa163e3.svn-base (0.7 KB)
+    📁 47/
+      📄 47b15748ecc8e952c5935170090db7c269ce4b4f.svn-base (5.5 KB)
+    📁 48/
+      📄 48b06167603c49a2a741522cb93ff7a118f0445f.svn-base (0.2 KB)
+    📁 4d/
+      📄 4d2168098558376e8f72c037b5bb881e7f631ddf.svn-base (25.8 KB)
+    📁 4e/
+      📄 4e37f6d823ea37ea847ed2efcda700dcec15a2a7.svn-base (18.0 KB)
+    📁 4f/
+      📄 4fb7a4ca7d1e3d0e86d4983f3d84383abc416398.svn-base (0.9 KB)
+    📁 50/
+      📄 507adcf0c4579160ada6e7f52f12b6babd147a88.svn-base (574.0 KB)
+      📄 50cc6d5318255e6b750340c9f961d14e4731ea9b.svn-base (2.5 KB)
+    📁 52/
+      📄 52d633b2090f5dbc727b2408e609d80f07e52115.svn-base (2.1 KB)
+    📁 53/
+      📄 53445f59789ee44fcf12a31cf968703ee57e1834.svn-base (1.0 KB)
+      📄 53573bb657c628372a4880a125cde222587e03af.svn-base (3.5 KB)
+    📁 55/
+      📄 55f4b2b9920a16e75e67999618c49290ee992850.svn-base (159.5 KB)
+    📁 5b/
+      📄 5bcfad124845a7af9cffdb689c37358500c24db3.svn-base (6.9 KB)
+    📁 5c/
+      📄 5c0c5f1f3b6b127df86e9908e75f55d2eb1717a9.svn-base (511.4 KB)
+      📄 5c2b6ac3cc4d683d4d81cb1bee5ddcff987a6c11.svn-base (3.0 KB)
+      📄 5c72fc23b21a47ee42d6a1e4825ad5b59826c49e.svn-base (10.5 KB)
+    📁 5e/
+      📄 5e198d58851231b69595a5800739f06b875cca3d.svn-base (0.2 KB)
+      📄 5e1d04de66ffcc5dfd813530ab6992e6daaae417.svn-base (0.2 KB)
+      📄 5e2f81bfcae1e91b9cbaa4546ef1c14f9a12a49f.svn-base (6.8 KB)
+    📁 60/
+      📄 60cd52b25464c66435079ff7a568ec41783db350.svn-base (3.5 KB)
+    📁 61/
+      📄 611eb2f7f42686793d86483d9efb7b07237b32e6.svn-base (66.2 KB)
+      📄 61498ead51a0f2f3ce84f9a60b8179ea1815ac00.svn-base (0.1 KB)
+    📁 62/
+      📄 62787cf7935a5aceb3a65567515b6ba207ed8a2e.svn-base (7.4 KB)
+    📁 63/
+      📄 63cc9d28807c68c1f6050ba9c6924054555df054.svn-base (1.1 KB)
+    📁 64/
+      📄 64af76826224d83fa552ffc60c78731b3e5e9fae.svn-base (11.8 KB)
+    📁 65/
+      📄 656c51394ecaa594feba656e50dd92c8200afd3b.svn-base (3.7 KB)
+      📄 65d3aaa66f9124c9c2f3238f65bbfa9f092d4ecf.svn-base (260.2 KB)
+    📁 69/
+      📄 692de8735369d8447f83f3c10805b8c8dd731bc9.svn-base (28.5 KB)
+    📁 6c/
+      📄 6c983c6d7969f59b973310bd6a4719fedbeb924c.svn-base (0.0 KB)
+    📁 6f/
+      📄 6f896b01ad3150643adf2173b34bfc49661a9959.svn-base (16.5 KB)
+      📄 6f8d574692b76f19754b0f0dba213de74946e008.svn-base (40.0 KB)
+      📄 6fb41bae5142e05ef21474acd905646ad9c97b26.svn-base (103.8 KB)
+    📁 72/
+      📄 72cbff708c83f3f4f09a8528ccc383d0100a4eb4.svn-base (1.4 KB)
+      📄 72d9a2ed3323b86fb7a201a9dc87ef82cddf293e.svn-base (11.3 KB)
+    📁 76/
+      📄 76ba21e115920abbcbd61deaa666ab92b5aa18a9.svn-base (5.7 KB)
+      📄 76f5c427019ca197e2801de5de55546b533cdf23.svn-base (10.2 KB)
+    📁 77/
+      📄 776243e6e5216029b8b5cf144161b620e00548da.svn-base (6.9 KB)
+    📁 78/
+      📄 78147369bcac902b8aefbe59e26852e0e179bfb6.svn-base (0.2 KB)
+    📁 79/
+      📄 7973a980d2e478453ee86357863bef92ddcaf27f.svn-base (5.7 KB)
+    📁 7b/
+      📄 7b6322b1106d60c9b491e05f122628d038dcd046.svn-base (0.5 KB)
+    📁 7c/
+      📄 7cdbff297593951a00d6d569a52fe18505b76a46.svn-base (3.5 KB)
+    📁 7d/
+      📄 7d9e949ad72ee90b8ff028fa8b0d13ab07f2d335.svn-base (27.5 KB)
+    📁 7e/
+      📄 7e3361e64b75347efcbb1a823db39e8d886f8b96.svn-base (2.2 KB)
+    📁 7f/
+      📄 7fb71214b1b7b0e83d662ccb61c088ab9d9bea28.svn-base (5.7 KB)
+    📁 81/
+      📄 81613e17a142e8727860aa28a70695fefa6ee062.svn-base (4.7 KB)
+    📁 84/
+      📄 84ff80b283bae6c3e3384a1e270d33c2a507483f.svn-base (13.0 KB)
+    📁 85/
+      📄 85c0d5e4492c25e92d278d43f51374048d248b71.svn-base (0.9 KB)
+      📄 85c5458e032c9fbd29491219cda2884260178292.svn-base (23.0 KB)
+    📁 86/
+      📄 863c50b38c40be37359492b39f20d05177ff0993.svn-base (1.1 KB)
+    📁 87/
+      📄 87538c7d1812768e1baba9201c2e66c270c396f3.svn-base (33.5 KB)
+    📁 89/
+      📄 89f72725904c93f6a09d36b200c9025c668f3a2d.svn-base (141.7 KB)
+    📁 8c/
+      📄 8c98cacdabb4e53bbd5055a7b31d867a892a8b29.svn-base (9.6 KB)
+      📄 8cc9ddfe7ef52c8d291b3e658a0e1b51fc0a8956.svn-base (28.5 KB)
+      📄 8ce0c127ec2731f8d506eceb8e0afc4e731576e6.svn-base (1.7 KB)
+    📁 8e/
+      📄 8e2d3a651d9f8b4fb3ed61abb2efc87b5db47daf.svn-base (4.7 KB)
+    📁 8f/
+      📄 8f0089444f86a3ea9f90f90315eede942e7dbd3c.svn-base (1.2 KB)
+    📁 90/
+      📄 908922663823589a4d4a932a7b8ec84a3c5c600b.svn-base (33.5 KB)
+    📁 91/
+      📄 9164d999da27af0560cf970c2b53e4ecd7798417.svn-base (2.3 KB)
+      📄 9188473cba2dbb8912f55b759ead5477081c38d0.svn-base (2.9 KB)
+    📁 93/
+      📄 93d1a4c13729ae8004d76bc3f434b779f7e7c0b0.svn-base (1.1 KB)
+    📁 95/
+      📄 95357d0cd9dd4273cf99ace70bbbf4396c707946.svn-base (0.4 KB)
+    📁 96/
+      📄 9685d4ed9e4462f6f0da27e8212bc8236dd8182f.svn-base (21.0 KB)
+    📁 97/
+      📄 9732db1e74271e958b1181f135a8b8c71bba503d.svn-base (20.8 KB)
+      📄 9734ee1c8150312d5aa6e9d8907df23597c691ad.svn-base (2.1 KB)
+    📁 98/
+      📄 98a888d8a18d545d3a75f1d6758ea86cba4b1e77.svn-base (1.3 KB)
+    📁 9f/
+      📄 9f9e1ad1f2922fdde608cd398f1816a1867383c6.svn-base (0.0 KB)
+    📁 a3/
+      📄 a3fa843edc18f0d42e12c557032f939047cae687.svn-base (1.7 KB)
+    📁 a5/
+      📄 a53d69d405209ab23f95beb756c53f2ac705565e.svn-base (4.8 KB)
+      📄 a5af1b1ac13575fd7d29bc0d5933a0a19e65e22f.svn-base (0.2 KB)
+    📁 a7/
+      📄 a705e28f9c131f02e3cb815d6672b4512837c47f.svn-base (1.0 KB)
+    📁 ab/
+      📄 aba0d14048b49fd086ba116ae6e38c3ccaca9b28.svn-base (1.7 KB)
+    📁 ac/
+      📄 ac101453f648d90c1ff126911e28ea5891493e58.svn-base (0.8 KB)
+    📁 ad/
+      📄 ad8e125a1bc178e5d0a055e4ec8976c2bedce345.svn-base (17.3 KB)
+      📄 addea6bd6f6353e715c471600a9467604b99360c.svn-base (0.0 KB)
+    📁 b0/
+      📄 b034c218a32419eadb4c8ca038906ba8bd4fd1ea.svn-base (2.0 KB)
+      📄 b0e4ba70c13d833c4c77490ed602293a42efef04.svn-base (32.0 KB)
+    📁 b1/
+      📄 b1d645a170bf7302f9a8a049deaecc2f917f509f.svn-base (24.5 KB)
+      📄 b1e0abf7f0e4afc090c7b26ef6b533de0d03f487.svn-base (5.9 KB)
+    📁 b3/
+      📄 b307792a846c82c81a8d62cb7b5527a487021085.svn-base (0.0 KB)
+      📄 b31b5174f92ee15d7137395e60d79e00a96a806e.svn-base (0.6 KB)
+      📄 b3bcb6ed9726bbb882a01c1503c594dbdb924e10.svn-base (2.0 KB)
+    📁 b6/
+      📄 b68c54618f7cc25d534a3778b9f9eb9aa488779e.svn-base (11.2 KB)
+    📁 b9/
+      📄 b9190504e4d348002a1a440c184fc3e94b44efe8.svn-base (0.2 KB)
+    📁 bb/
+      📄 bba2f8b43e91e32853c5a18db437b7e8d1a517a6.svn-base (1.8 KB)
+    📁 bf/
+      📄 bf9ecb0a3576e5f3d3ddf527b723b9c524046dc4.svn-base (9.7 KB)
+    📁 c1/
+      📄 c1ac0f2329e3eef311abc574855f08ef6669dd6c.svn-base (2.1 KB)
+    📁 c2/
+      📄 c2e104da45f90993256da99d68332138a82a2d67.svn-base (4.3 KB)
+    📁 c3/
+      📄 c3b58d82ee4cc42bcbe030202120718309a10f35.svn-base (0.1 KB)
+    📁 c5/
+      📄 c54122aab65e521c15021068d93c1c0632637106.svn-base (865.1 KB)
+    📁 c7/
+      📄 c70cb557fefe2abcc8d8ec377d4f19f7c319a10c.svn-base (0.7 KB)
+      📄 c7168ba1ef51e749c1d3ca9deb8703460a2c0dff.svn-base (31.5 KB)
+    📁 c8/
+      📄 c8c05432e594759e9c45c209733512b24115920d.svn-base (27.7 KB)
+    📁 c9/
+      📄 c90af316c1cae8410cbb52c18698c9c6b98039a0.svn-base (4.6 KB)
+      📄 c9e20380b906578ff56957b3dd72101d0b4b0398.svn-base (1.6 KB)
+    📁 cb/
+      📄 cba840af81a39f80ae874ddcc471be122f3b1e20.svn-base (2.8 KB)
+      📄 cbbbc1bc6dd4711abc21d17aa83061795d9227bf.svn-base (0.5 KB)
+    📁 cc/
+      📄 cc69f03f7a24ce39b07b59102c684810f2b64b90.svn-base (18.0 KB)
+      📄 cc6a34a665f891eb73d42be2dc3e0f572a0e4229.svn-base (0.0 KB)
+      📄 ccc34767996fd809924424124fcf12ff746e4d17.svn-base (16.5 KB)
+      📄 cced2e2ba6ea74de8b2968e31d12e29c71229105.svn-base (0.4 KB)
+    📁 cd/
+      📄 cd9bfb1952af918f2d914f199941ed2c8ef1a513.svn-base (177.0 KB)
+      📄 cdf66c841d557252388dfbc6d5292cd35d93b738.svn-base (0.4 KB)
+    📁 ce/
+      📄 ce41458da4503ebeafebe8889181a13a2b502a33.svn-base (1.2 KB)
+      📄 cebbb4562ed3a7373c959c8c95f66700a6f39364.svn-base (1.6 KB)
+      📄 ced9110f99db64483b6d277f547a4fdc0f8c68e0.svn-base (1.1 KB)
+    📁 d2/
+      📄 d24e652643fca580eca23158f3efa7396371f5e0.svn-base (1524.9 KB)
+      📄 d2f170fa67f3154a6f6ffb8e3849e35e3b3bc16e.svn-base (3.5 KB)
+    📁 d8/
+      📄 d819132bfa0b3bde281233b2a9879a9983850165.svn-base (2.7 KB)
+      📄 d8dc1f3e6bc8ef3e5ba16faf060cfe8bb28cff5c.svn-base (7.6 KB)
+    📁 d9/
+      📄 d91aa5d9b70e1adf656bad1b2cf1f50d0f664616.svn-base (5486.5 KB)
+    📁 da/
+      📄 da39a3ee5e6b4b0d3255bfef95601890afd80709.svn-base (0.0 KB)
+      📄 daa546d6dc54441b8e850a7c4b262d1fc3d22182.svn-base (0.4 KB)
+      📄 daf3b8146b90a6af3943321156877fbe3b575a39.svn-base (13.0 KB)
+    📁 db/
+      📄 db560ded351835c938ec2d2d24ab7eba62febbb6.svn-base (3.9 KB)
+      📄 db7292e644f8ae5b2bb6d45ee0125d18acbd515b.svn-base (96.0 KB)
+      📄 dbb2d181f94733a91cff6c6088b13b8e07d50ded.svn-base (33.6 KB)
+      📄 dbbbbe2694d4b9b990881f279b4313574dbeac9b.svn-base (0.2 KB)
+    📁 dd/
+      📄 ddc23f0d292335182c9d2a08b2cc0f097d4d737c.svn-base (3.9 KB)
+    📁 df/
+      📄 df7f88a0266f4da910ac306f75ff78228c84685e.svn-base (31.5 KB)
+    📁 e0/
+      📄 e00ce95e19b45727f35ddb9501e8de9703cb9336.svn-base (0.0 KB)
+    📁 e1/
+      📄 e158ada47d22bad5164bbc6f27bd5594d731aa4e.svn-base (3.0 KB)
+      📄 e1aac8d35e4cb824ac6465e4608c4c37857cb490.svn-base (21.5 KB)
+    📁 e4/
+      📄 e4aafdcaa1372e0aa2a794caf088d72c01d1e670.svn-base (10.2 KB)
+    📁 e5/
+      📄 e50333a1d46c001e19e4d804a28ec0bd4030f497.svn-base (0.6 KB)
+    📁 e7/
+      📄 e76d57b39161b42645c2f07e23ac911679ec9374.svn-base (4.8 KB)
+    📁 e8/
+      📄 e8836dacc73e26b03f2e6ec6fef387cf2325a21a.svn-base (7.7 KB)
+      📄 e8990a590c9a2ef8660efc85ef0fdaf26ee98291.svn-base (10.3 KB)
+    📁 e9/
+      📄 e9df8ef1948cc1c515682f8e1a58a6c101c48439.svn-base (102.1 KB)
+    📁 ea/
+      📄 ea05b4f9358502e1ab6093daee00b8847a77ce60.svn-base (4.8 KB)
+      📄 ea0750099e97de3da9fad57096b822690f5085ba.svn-base (24.7 KB)
+      📄 ea2d03de47f744d7595efca9ecda82bd278d4ca3.svn-base (0.4 KB)
+    📁 ed/
+      📄 edf9830dc2ccd3ba11d7293d22d796874b89a898.svn-base (2.9 KB)
+    📁 ef/
+      📄 efdb58f5efe565f04427b6116bbf3f86dbb2bcf8.svn-base (2.5 KB)
+    📁 f1/
+      📄 f16826eddf2c6694c4b858ffafca037d34d7b688.svn-base (2.8 KB)
+    📁 f2/
+      📄 f2643d3a6abfa8b2de241f88af32ba39b29af48c.svn-base (1.3 KB)
+      📄 f267b33df5cd5986e0c52826bea222fe7b3b8028.svn-base (0.7 KB)
+    📁 f5/
+      📄 f5ac8f464d0be08aefb90310b424ea4d383969fc.svn-base (70.0 KB)
+    📁 f7/
+      📄 f7f8fa21ee22100a5a4809213d820ac30f2519db.svn-base (8.6 KB)
+    📁 fc/
+      📄 fc9916ac2dc242014e9185b3139c22efae59b8ab.svn-base (13147.9 KB)
+    📁 fe/
+      📄 fe08b65872f614c1c78e83badeee6b328bbc8fc3.svn-base (17.3 KB)
+    📁 ff/
+      📄 ff5ddc69482b2832a0f8b391f37611278f09c37d.svn-base (4.7 KB)
+  📁 tmp/
+📁 ZKFinger Standard SDK 5.3.0.33/
+  📁 ActiveX/
+    📁 en-doc/
+      📄 Licence.txt (4.7 KB)
+      📄 Readme.txt (3.9 KB)
+      📄 ZKFinger SDK_en.pdf (511.4 KB)
+    📁 samples/
+      📁 C#/
+        📁 .vs/
+        📄 app.config (0.2 KB)
+        📁 bin/
+        📁 data/
+        📄 Demo.csproj (9.2 KB)
+        📄 Demo.csproj.user (0.6 KB)
+        📄 Demo.sln (1.0 KB)
+        📄 Demo.suo (96.0 KB)
+        📄 Form1.cs (10.2 KB)
+        📄 Form1.Designer.cs (23.0 KB)
+        📄 Form1.resx (6.9 KB)
+        📁 obj/
+        📄 Program.cs (0.5 KB)
+        📁 Properties/
+        📁 Resources/
+        📄 Settings.cs (1.2 KB)
+        📄 UpgradeLog.XML (3.7 KB)
+        📄 UpgradeLog2.XML (4.7 KB)
+      📁 Delphi/
+        📄 Demo.cfg (0.6 KB)
+        📄 Demo.dof (2.2 KB)
+        📄 Demo.dpr (0.2 KB)
+        📄 Demo.exe (574.0 KB)
+        📄 Demo.res (1.1 KB)
+        📄 fingerprint.tpl (0.0 KB)
+        📄 Unit1.dcu (16.8 KB)
+        📄 Unit1.ddp (0.0 KB)
+        📄 Unit1.dfm (5.9 KB)
+        📄 Unit1.pas (9.6 KB)
+      📁 VC/
+        📄 Demo.aps (24.7 KB)
+        📄 Demo.clw (2.1 KB)
+        📄 Demo.cpp (2.0 KB)
+        📄 Demo.dsp (4.6 KB)
+        📄 Demo.dsw (0.6 KB)
+        📄 Demo.h (1.3 KB)
+        📄 Demo.opt (159.5 KB)
+        📄 Demo.plg (1.8 KB)
+        📄 Demo.rc (7.6 KB)
+        📄 Demo.sln (0.9 KB)
+        📄 Demo.suo (70.0 KB)
+        📄 Demo.vcproj (7.4 KB)
+        📄 Demo.vcproj.DESKTOP-N8C5G0U.scarx.user (1.4 KB)
+        📄 Demo.vcxproj (10.5 KB)
+        📄 Demo.vcxproj.filters (2.0 KB)
+        📄 Demo.vcxproj.user (0.1 KB)
+        📄 DemoDlg.cpp (20.8 KB)
+        📄 DemoDlg.h (3.2 KB)
+        📄 Fake.csv (0.2 KB)
+        📄 fingerprint.bmp (141.7 KB)
+        📄 fingerprint.tpl (0.5 KB)
+        📄 ReadMe.txt (3.5 KB)
+        📁 Release/
+        📁 res/
+        📄 resource.h (2.3 KB)
+        📄 StdAfx.cpp (0.2 KB)
+        📄 StdAfx.h (1.1 KB)
+        📄 UpgradeLog.XML (2.7 KB)
+        📄 zkfpengx1.cpp (0.5 KB)
+        📄 zkfpengx1.h (25.8 KB)
+  📁 c/
+    📁 libs/
+      📁 include/
+        📄 libzkfp.h (17.3 KB)
+        📄 libzkfperrdef.h (1.6 KB)
+        📄 libzkfptype.h (0.7 KB)
+        📄 zkinterface.h (0.4 KB)
+      📁 x64lib/
+        📄 libzkfp.lib (9.5 KB)
+      📁 x86lib/
+        📄 libzkfp.lib (10.2 KB)
+    📁 MFC Demo/
+      📁 libzkfpDemo2/
+        📁 Debug/
+        📁 libzkfp/
+        📄 libzkfpDemo.aps (103.8 KB)
+        📄 libzkfpDemo.cpp (1.7 KB)
+        📄 libzkfpDemo.h (0.5 KB)
+        📄 libzkfpDemo.rc (5.7 KB)
+        📄 libzkfpDemo.sln (3.0 KB)
+        📄 libzkfpDemo.suo (10.5 KB)
+        📄 libzkfpDemo.vcproj (27.7 KB)
+        📄 libzkfpDemo.vcproj.DESKTOP-N8C5G0U.scarx.user (8.6 KB)
+        📄 libzkfpDemoDlg.cpp (16.7 KB)
+        📄 libzkfpDemoDlg.h (1.7 KB)
+        📄 ReadMe.txt (2.9 KB)
+        📁 res/
+        📄 resource.h (1.2 KB)
+        📄 stdafx.cpp (0.1 KB)
+        📄 stdafx.h (2.1 KB)
+        📄 targetver.h (1.0 KB)
+        📄 test.txt (3.9 KB)
+    📄 ZKFinger Reader SDK C API_en_V2.pdf (260.2 KB)
+  📁 C#/
+    📁 Demo2/
+      📁 .vs/
+        📁 Demo2/
+      📄 BitmapFormat.cs (11.2 KB)
+      📄 Demo2.csproj (10.3 KB)
+      📄 Demo2.sln (4.3 KB)
+      📄 Demo2.suo (24.5 KB)
+      📄 Form1.cs (11.2 KB)
+      📄 Form1.Designer.cs (8.3 KB)
+      📄 Form1.resx (5.7 KB)
+      📁 obj/
+        📁 x64/
+        📁 x86/
+      📄 Program.cs (0.5 KB)
+      📁 Properties/
+        📄 AssemblyInfo.cs (1.3 KB)
+        📄 Resources.Designer.cs (2.8 KB)
+        📄 Resources.resx (5.5 KB)
+        📄 Settings.Designer.cs (1.1 KB)
+        📄 Settings.settings (0.2 KB)
+      📄 UpgradeLog.htm (41.2 KB)
+      📄 UpgradeLog2.htm (33.6 KB)
+    📁 lib/
+      📁 x64/
+        📄 libzkfpcsharp.dll (13.0 KB)
+      📁 x86/
+        📄 libzkfpcsharp.dll (13.0 KB)
+    📄 ZKFinger Reader SDK C#_en_V2.pdf (286.2 KB)
+  📁 Java/
+    📁 lib/
+      📄 ZKFingerReader.jar (11.8 KB)
+    📁 sample/
+      📁 ZKFinger Demo2/
+        📄 .classpath (0.4 KB)
+        📄 .project (0.4 KB)
+        📁 .settings/
+        📁 bin/
+        📁 lib/
+        📁 src/
+    📄 ZKFinger Reader SDK for JAVA_en_V2.pdf (379.2 KB)
+  📄 setup.exe (13147.9 KB)

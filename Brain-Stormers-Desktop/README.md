@@ -92,4 +92,30 @@ After installing, launch the app from the Start menu or a desktop shortcut. The 
 - If the app cannot find the UI assets after installation, verify that the `release/` folder contains the bundled `dist/` resources.
 
 ---
+
+## 🔌 Biometric Scanner Native Integration (Phase 5)
+
+To interface with the physical fingerprint scanner on Windows, this wrapper utilizes native integration:
+
+1. **Native FFI Library (`koffi`):**
+   We use the lightweight, fast Node.js Foreign Function Interface package **`koffi`** to dynamically bind the native ZKFinger C API functions directly from JavaScript inside the Electron main process.
+
+2. **Required Files & Folder Structure:**
+   - **`/sdk`** folder inside the desktop project root contains:
+     - `/sdk/x64/libzkfp.lib`: The 64-bit static import library.
+     - `/sdk/x86/libzkfp.lib`: The 32-bit static import library.
+     - `/sdk/include/*.h`: The C-interface header files defining ZKFinger structs, parameters, error codes, and function signatures.
+   - **`libzkfp.dll`**: The runtime dynamic link library. Rather than bundling it, the desktop app references it directly from `C:\Windows\System32\libzkfp.dll` (which is installed globally on the PC by running the official driver `setup.exe`).
+
+3. **FFI Javascript Wrapper:**
+   - Housed at [`src/main/fingerprintSdk.js`](file:///c:/Users/niaz/Desktop/Brain-Stormers/Projects/Brain-Stormers-Attendance/Brain-Stormers-Desktop/src/main/fingerprintSdk.js).
+   - Dynamically loads `libzkfp.dll` and exposes three async functions via Electron IPC:
+     - `initDevice()`: Initialises the SDK library, verifies a connected scanner, opens device index 0, and queries sensor dimensions (Width, Height, DPI).
+     - `captureFingerprint(timeoutMs)`: Spawns an asynchronous polling loop that checks for a finger touch on the sensor. On a successful touch, it captures the template and returns its base64-encoded representation and byte size.
+     - `closeDevice()`: Safely terminates any active scanning loops, closes the device handle, and cleans up the library allocation.
+
+4. **Testing UI:**
+   A floating Neumorphic **Fingerprint Tester** panel is injected via [`preload.js`](file:///c:/Users/niaz/Desktop/Brain-Stormers/Projects/Brain-Stormers-Attendance/Brain-Stormers-Desktop/preload.js) at the bottom-right corner of the window. This allows developers to test hardware initialization, device detection, and end-to-end template acquisition without modifying the central React PWA code.
+
+---
 *Feel free to customize the NSIS installer (shortcuts, license, etc.) by extending the `build.win` configuration in `package.json`.*

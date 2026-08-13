@@ -2,6 +2,7 @@ const { app, BrowserWindow, Menu, ipcMain } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const http = require('http');
+const fingerprintSdk = require('./src/main/fingerprintSdk');
 
 let mainWindow;
 let settingsWindow;
@@ -358,6 +359,37 @@ ipcMain.on('respond-test-staff-error', (event, error) => {
   console.error('[Fingerprint Bridge] Simulation failed to fetch test staff:', error);
 });
 
+// Native Fingerprint SDK IPC Handlers
+ipcMain.handle('fingerprint:init', async () => {
+  try {
+    const result = await fingerprintSdk.initDevice();
+    return { success: true, ...result };
+  } catch (err) {
+    console.error('[Fingerprint IPC] Init failed:', err.message);
+    return { success: false, error: err.message };
+  }
+});
+
+ipcMain.handle('fingerprint:capture', async (event, timeoutMs) => {
+  try {
+    const result = await fingerprintSdk.captureFingerprint(timeoutMs);
+    return { success: true, ...result };
+  } catch (err) {
+    console.error('[Fingerprint IPC] Capture failed:', err.message);
+    return { success: false, error: err.message };
+  }
+});
+
+ipcMain.handle('fingerprint:close', async () => {
+  try {
+    const result = await fingerprintSdk.closeDevice();
+    return { success: true, ...result };
+  } catch (err) {
+    console.error('[Fingerprint IPC] Close failed:', err.message);
+    return { success: false, error: err.message };
+  }
+});
+
 app.whenReady().then(() => {
   createWindow();
 
@@ -371,6 +403,10 @@ app.on('window-all-closed', function () {
   if (staticServer) {
     staticServer.close();
   }
+  // Close fingerprint SDK device on exit
+  fingerprintSdk.closeDevice().catch(err => {
+    console.error('[Fingerprint SDK] Close failed on exit:', err);
+  });
   if (process.platform !== 'darwin') app.quit();
 });
 
