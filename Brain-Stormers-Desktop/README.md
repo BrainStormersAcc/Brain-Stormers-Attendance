@@ -117,5 +117,30 @@ To interface with the physical fingerprint scanner on Windows, this wrapper util
 4. **Testing UI:**
    A floating Neumorphic **Fingerprint Tester** panel is injected via [`preload.js`](file:///c:/Users/niaz/Desktop/Brain-Stormers/Projects/Brain-Stormers-Attendance/Brain-Stormers-Desktop/preload.js) at the bottom-right corner of the window. This allows developers to test hardware initialization, device detection, and end-to-end template acquisition without modifying the central React PWA code.
 
+## ⏰ Automatic Attendance Capture & Tray Background Listening (Phase 8)
+
+The desktop application supports continuous, background biometrics capture for automatic staff check-in/check-out.
+
+### 1. Background Listening Mode
+*   **Startup Listening:** Upon successful application load, the main process automatically begins a continuous polling loop to detect finger scans on the connected device.
+*   **System Tray Integration:** Intercepts close button (`X`) clicks to hide the window to the Windows System Tray instead of quitting. This keeps the background listening active in the background. Right-click the system tray icon and select **Quit** to fully close the application.
+*   **Loop Suspension:** The background loop is automatically suspended during enrollment procedures or diagnostics to prevent hardware conflicts, resuming as soon as those tasks complete.
+
+### 2. Attendance Validation Logic
+When a finger scan is captured, the main process performs the following matching sequence:
+1.  **Similarity Match:** Compares the captured template against the in-memory cache of enrolled staff templates. If no match is found (match score <= 30), it alerts the frontend layout.
+2.  **Date Resolution:** Resolves today's date in `YYYY-MM-DD` format.
+3.  **Check-In Registration:** If no non-deleted attendance record exists for the staff member today:
+    *   Creates a new attendance document in Firestore with `checkIn: now`, `checkOut: null`, `markedBy: "fingerprint"`, `markedByUserId: "fingerprint-scanner"`, and `isDeleted: false`.
+    *   Sets `status` to `"Late"` or `"Present"` based on the configurable **Late Cutoff Time** saved in settings (default `09:30 AM`).
+    *   Registers a `create` action in the `auditLogs` collection.
+4.  **Check-Out Registration:** If an attendance record exists for today with no `checkOut` value:
+    *   Updates the document in Firestore with `checkOut: now`.
+    *   Registers an `update` action in the `auditLogs` collection.
+5.  **Double-Scan Check:** If the staff member has already checked in and out today, the scan is blocked, showing an alert.
+
+### 3. Settings Configuration
+*   **Late Cutoff Time:** A configurable input field is added to the Biometric Settings panel (`Ctrl + Shift + S`) allowing administrators to modify the check-in grace period (e.g., `09:00`, `09:30`). This setting is persisted inside `device-settings.json`.
+
 ---
 *Feel free to customize the NSIS installer (shortcuts, license, etc.) by extending the `build.win` configuration in `package.json`.*

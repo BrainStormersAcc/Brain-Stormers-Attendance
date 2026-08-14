@@ -1684,13 +1684,14 @@ export default function StaffDashboard() {
                     {(isAdmin || isStaff) && <th>Staff Name</th>}
                     <th>Date</th>
                     <th>Check-In</th>
+                    <th>Check-Out</th>
                     <th>Status</th>
                     {(isAdmin || isStaff) && <th>Marked By</th>}
                     {(isAdmin || isStaff) && <th style={{ textAlign: 'center' }}>Actions</th>}
                   </tr>
                 </thead>
                 <tbody>
-                  {renderTableSkeleton(isAdmin ? 6 : 5)}
+                  {renderTableSkeleton(isAdmin ? 7 : 6)}
                 </tbody>
               </table>
             </div>
@@ -1710,6 +1711,7 @@ export default function StaffDashboard() {
                     {(isAdmin || isStaff) && <th>Staff Name</th>}
                     <th>Date</th>
                     <th>Check-In</th>
+                    <th>Check-Out</th>
                     <th>Status</th>
                     {(isAdmin || isStaff) && <th>Marked By</th>}
                     {(isAdmin || isStaff) && <th style={{ textAlign: 'center' }}>Actions</th>}
@@ -1727,6 +1729,7 @@ export default function StaffDashboard() {
                         {formatDateLabel(log.date)}
                       </td>
                       <td>{formatTime(log.checkIn)}</td>
+                      <td>{log.checkOut ? formatTime(log.checkOut) : '--'}</td>
                       <td>
                         <NeuBadge variant={log.status}>{log.status}</NeuBadge>
                       </td>
@@ -1891,7 +1894,7 @@ export default function StaffDashboard() {
                   )}
                   <div style={{ 
                     display: 'grid', 
-                    gridTemplateColumns: '1fr', 
+                    gridTemplateColumns: '1fr 1fr', 
                     gap: '12px', 
                     fontSize: '0.85rem', 
                     borderTop: (isAdmin || isStaff) ? 'none' : '1px solid var(--border-color)', 
@@ -1900,6 +1903,10 @@ export default function StaffDashboard() {
                     <div>
                       <span style={{ display: 'block', color: 'var(--text-secondary)', marginBottom: '2px' }}>Check-In</span>
                       <span style={{ fontWeight: 600 }}>{formatTime(log.checkIn)}</span>
+                    </div>
+                    <div>
+                      <span style={{ display: 'block', color: 'var(--text-secondary)', marginBottom: '2px' }}>Check-Out</span>
+                      <span style={{ fontWeight: 600 }}>{log.checkOut ? formatTime(log.checkOut) : '--'}</span>
                     </div>
                   </div>
                   {(isAdmin || (!isAdmin && getEditableTimeRemaining(log) > 0)) && (
@@ -2216,8 +2223,8 @@ export default function StaffDashboard() {
     }
 
     const headers = isAdmin
-      ? ['Staff Name', 'Date', 'Check-In', 'Status', 'Marked By']
-      : ['Date', 'Check-In', 'Status'];
+      ? ['Staff Name', 'Date', 'Check-In', 'Check-Out', 'Status', 'Marked By']
+      : ['Date', 'Check-In', 'Check-Out', 'Status'];
 
     const csvRows = [];
     csvRows.push(headers.join(','));
@@ -2229,6 +2236,7 @@ export default function StaffDashboard() {
       }
       row.push(`"${formatDateLabel(log.date)}"`);
       row.push(`"${formatTime(log.checkIn)}"`);
+      row.push(`"${log.checkOut ? formatTime(log.checkOut) : '--'}"`);
       row.push(`"${log.status}"`);
       if (isAdmin) {
         row.push(`"${log.markedBy || 'manual'}"`);
@@ -2314,6 +2322,7 @@ export default function StaffDashboard() {
                 ${isAdmin ? '<th>Staff Name</th>' : ''}
                 <th>Date</th>
                 <th>Check-In</th>
+                <th>Check-Out</th>
                 <th>Status</th>
                 ${isAdmin ? '<th>Marked By</th>' : ''}
               </tr>
@@ -2324,6 +2333,7 @@ export default function StaffDashboard() {
                   ${isAdmin ? `<td>${staffNameMap[log.userId] || 'Unknown User'}</td>` : ''}
                   <td>${formatDateLabel(log.date)}</td>
                   <td>${formatTime(log.checkIn)}</td>
+                  <td>${log.checkOut ? formatTime(log.checkOut) : '--'}</td>
                   <td><span class="status-badge">${log.status}</span></td>
                   ${isAdmin ? `<td>${log.markedBy || 'manual'}</td>` : ''}
                 </tr>
@@ -3217,6 +3227,7 @@ export default function StaffDashboard() {
                     <tr>
                       <th>Date</th>
                       <th>Check-In</th>
+                      <th>Check-Out</th>
                       <th>Status</th>
                       <th>Marked By</th>
                     </tr>
@@ -3226,6 +3237,7 @@ export default function StaffDashboard() {
                       <tr key={log.id || `${log.userId}_${log.date}`}>
                         <td style={{ fontWeight: 500 }}>{formatDateLabel(log.date)}</td>
                         <td>{formatTime(log.checkIn)}</td>
+                        <td>{log.checkOut ? formatTime(log.checkOut) : '--'}</td>
                         <td>
                           <NeuBadge variant={log.status}>{log.status}</NeuBadge>
                         </td>

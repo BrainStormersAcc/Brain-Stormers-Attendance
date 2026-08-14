@@ -40,6 +40,7 @@ import { useAuth } from '../contexts/AuthContext.jsx';
 import Skeleton from '../shared/components/Skeleton.jsx';
 import { db } from '../config/firebase.js';
 import { collection, query, where, getDocs } from 'firebase/firestore';
+import EnrollStaff from './EnrollStaff.jsx';
 
 export default function DashboardHome(props) {
   const activeTab = props.view || 'overview';
@@ -1223,6 +1224,7 @@ export default function DashboardHome(props) {
                           <th style={{ padding: '12px 16px' }}>Name</th>
                           <th style={{ padding: '12px 16px' }}>Date</th>
                           <th style={{ padding: '12px 16px' }}>Check-In</th>
+                          <th style={{ padding: '12px 16px' }}>Check-Out</th>
                           <th style={{ padding: '12px 16px' }}>Status</th>
                           <th style={{ padding: '12px 16px' }}>Source</th>
                         </tr>
@@ -1242,6 +1244,7 @@ export default function DashboardHome(props) {
                               <td style={{ padding: '16px', fontWeight: 500 }}>{name}</td>
                               <td style={{ padding: '16px' }}>{log.date}</td>
                               <td style={{ padding: '16px' }}>{formatTime(log.checkIn)}</td>
+                              <td style={{ padding: '16px' }}>{log.checkOut ? formatTime(log.checkOut) : '--'}</td>
                               <td style={{ padding: '16px', fontWeight: 600, color: statusColor, textTransform: 'capitalize' }}>
                                 {log.status}
                               </td>
@@ -1259,6 +1262,11 @@ export default function DashboardHome(props) {
             )}
 
           </div>
+        )}
+
+        {/* VIEW: ENROLL STAFF */}
+        {activeTab === 'enroll-staff' && (
+          <EnrollStaff />
         )}
 
         {/* VIEW: ADMIN SETTINGS */}

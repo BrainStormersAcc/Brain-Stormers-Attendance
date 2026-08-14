@@ -1,4 +1,8 @@
-const { app, BrowserWindow, Menu, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain, dialog, Tray } = require('electron');
+
+// Force app name to ensure userData path resolves to 'brain-stormers-desktop' in both dev and production modes
+app.name = 'brain-stormers-desktop';
+
 const path = require('path');
 const fs = require('fs');
 const http = require('http');
@@ -8,11 +12,13 @@ const firebaseAdmin = require('./src/main/firebaseAdmin');
 let mainWindow;
 let settingsWindow;
 let staticServer;
+let tray = null;
 
 const SETTINGS_FILE = path.join(app.getPath('userData'), 'device-settings.json');
 
 // Helper to get local cached settings
 function getLocalSettings() {
+  console.log('[Electron Settings] Loading local settings from:', SETTINGS_FILE);
   if (fs.existsSync(SETTINGS_FILE)) {
     try {
       return JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8'));
@@ -28,7 +34,7 @@ function getLocalSettings() {
 function saveLocalSettings(settings) {
   try {
     fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2), 'utf8');
-    console.log('Successfully saved device settings locally to:', SETTINGS_FILE);
+    console.log('Settings saved to:', SETTINGS_FILE);
     
     // Notify PWA that the device was activated so it can update lastFetchedAt
     if (mainWindow) {
@@ -46,6 +52,9 @@ function saveLocalSettings(settings) {
           if (mainWindow) {
             mainWindow.webContents.send('firebase:status-changed', { success: true, staffCount: count });
           }
+          return preloadFingerprintCache().then(() => {
+            runBackgroundListeningLoop();
+          });
         })
         .catch(err => {
           if (mainWindow) {
@@ -268,9 +277,20 @@ function createWindow() {
     }
   });
 
+  // Intercept window close to minimize to tray instead
+  mainWindow.on('close', (event) => {
+    if (!app.isQuitting) {
+      event.preventDefault();
+      mainWindow.hide();
+      console.log('[Electron Window] Hidden to tray instead of quitting.');
+    }
+  });
+
   // 1. Check if the production build dist/index.html exists
+  console.log('[Electron Startup] Checking INDEX_HTML_PATH:', INDEX_HTML_PATH);
+  console.log('[Electron Startup] INDEX_HTML_PATH exists:', fs.existsSync(INDEX_HTML_PATH));
   if (!fs.existsSync(INDEX_HTML_PATH)) {
-    console.error("Build directory 'dist/' not found. Loading missing build error page.");
+    console.error("Build directory 'dist/' not found. Loading missing build error page. Expected path:", INDEX_HTML_PATH);
     mainWindow.loadFile(path.join(__dirname, 'error.html'));
     return;
   }
@@ -290,6 +310,9 @@ function createWindow() {
         if (mainWindow) {
           mainWindow.webContents.send('firebase:status-changed', { success: true, staffCount: count });
         }
+        return preloadFingerprintCache().then(() => {
+          runBackgroundListeningLoop();
+        });
       })
       .catch(err => {
         if (mainWindow) {
@@ -409,6 +432,13 @@ ipcMain.on('respond-test-staff-error', (event, error) => {
 // Native Fingerprint SDK IPC Handlers
 ipcMain.handle('fingerprint:init', async () => {
   try {
+    // Suspend background loop
+    isSuspendedForEnrollment = true;
+    isBackgroundListening = false;
+    
+    // Allow small delay for background polling loop to exit
+    await new Promise(resolve => setTimeout(resolve, 300));
+
     const result = await fingerprintSdk.initDevice();
     return { success: true, ...result };
   } catch (err) {
@@ -430,6 +460,11 @@ ipcMain.handle('fingerprint:capture', async (event, timeoutMs) => {
 ipcMain.handle('fingerprint:close', async () => {
   try {
     const result = await fingerprintSdk.closeDevice();
+    
+    // Resume background loop
+    isSuspendedForEnrollment = false;
+    runBackgroundListeningLoop();
+
     return { success: true, ...result };
   } catch (err) {
     console.error('[Fingerprint IPC] Close failed:', err.message);
@@ -473,14 +508,322 @@ ipcMain.handle('firebase:check-status', async () => {
 });
 
 let currentUserRole = null;
+const enrolledTemplatesCache = new Map();
+
+// Helper to pre-load enrolled templates into cache
+async function preloadFingerprintCache() {
+  const localSettings = getLocalSettings();
+  if (!localSettings.serviceAccountKeyPath) return;
+
+  try {
+    const admin = require('firebase-admin');
+    if (admin.apps.length === 0) return;
+
+    const db = admin.firestore();
+    const snapshot = await db.collection('users')
+      .where('role', '==', 'staff')
+      .where('active', '==', true)
+      .get();
+
+    enrolledTemplatesCache.clear();
+    snapshot.forEach(doc => {
+      const data = doc.data();
+      if (data.fingerprintTemplate) {
+        enrolledTemplatesCache.set(doc.id, data.fingerprintTemplate);
+      }
+    });
+
+    console.log(`[Firebase Cache] Successfully preloaded ${enrolledTemplatesCache.size} active staff fingerprint templates.`);
+  } catch (err) {
+    console.error('[Firebase Cache] Failed to preload fingerprint templates:', err.message);
+  }
+}
+
+// System Tray Setup
+function createTray() {
+  const iconPath = path.join(__dirname, 'assets', 'icon.png');
+  tray = new Tray(fs.existsSync(iconPath) ? iconPath : path.join(__dirname, 'index.html'));
+  
+  const contextMenu = Menu.buildFromTemplate([
+    { label: 'Open App', click: () => { if (mainWindow) mainWindow.show(); } },
+    { label: 'Quit', click: () => {
+      app.isQuitting = true;
+      app.quit();
+    }}
+  ]);
+  
+  tray.setToolTip('Brain Stormers Attendance');
+  tray.setContextMenu(contextMenu);
+  
+  tray.on('double-click', () => {
+    if (mainWindow) mainWindow.show();
+  });
+}
+
+// Background listening loop state
+let isBackgroundListening = false;
+let isSuspendedForEnrollment = false;
+
+async function runBackgroundListeningLoop() {
+  if (isBackgroundListening) return;
+  
+  isBackgroundListening = true;
+  console.log('[Background Listener] Started background fingerprint listening loop...');
+
+  while (isBackgroundListening && !isSuspendedForEnrollment) {
+    try {
+      // Ensure SDK is initialized
+      await fingerprintSdk.initDevice();
+
+      // Poll scanner (10 second timeout)
+      const result = await fingerprintSdk.captureFingerprint(10000);
+      
+      if (!isBackgroundListening || isSuspendedForEnrollment) {
+        break;
+      }
+
+      if (result && result.template) {
+        console.log('[Background Listener] Captured fingerprint. Matching template...');
+        await processBiometricScan(result.template);
+      }
+    } catch (err) {
+      if (err.message && err.message.includes('timeout')) {
+        // Expected timeout when no finger is scanned, sleep briefly and loop again
+        await new Promise(resolve => setTimeout(resolve, 200));
+        continue;
+      }
+      
+      console.error('[Background Listener] Loop encountered error:', err.message);
+      await new Promise(resolve => setTimeout(resolve, 3000));
+    }
+  }
+
+  isBackgroundListening = false;
+  console.log('[Background Listener] Background fingerprint listening loop stopped.');
+}
+
+// Process matching biometrics and register attendance in Firestore
+async function processBiometricScan(capturedTemplate) {
+  let matchedUid = null;
+  let highestScore = 0;
+
+  // Iterate over preloaded cache and run DB match
+  for (const [uid, cachedTemplate] of enrolledTemplatesCache.entries()) {
+    try {
+      const score = await fingerprintSdk.matchTemplates(capturedTemplate, cachedTemplate);
+      if (score > 30 && score > highestScore) {
+        highestScore = score;
+        matchedUid = uid;
+      }
+    } catch (e) {
+      console.error(`[Background Listener] Matching failed for uid ${uid}:`, e.message);
+    }
+  }
+
+  if (!matchedUid) {
+    console.log('[Background Listener] Fingerprint not recognized.');
+    if (mainWindow) {
+      mainWindow.webContents.send('attendance:scanned', { success: false, error: 'Fingerprint not recognized' });
+    }
+    return;
+  }
+
+  console.log(`[Background Listener] Fingerprint matched user ${matchedUid} (score: ${highestScore}). Updating Firestore...`);
+
+  try {
+    const admin = require('firebase-admin');
+    if (admin.apps.length === 0) {
+      throw new Error('Firebase Admin SDK is not initialized.');
+    }
+    const db = admin.firestore();
+    
+    // Fetch staff profile details
+    const userDoc = await db.collection('users').doc(matchedUid).get();
+    if (!userDoc.exists) {
+      throw new Error('Matched user document does not exist in database.');
+    }
+    const userData = userDoc.data();
+    const name = userData.name || 'Staff Member';
+
+    // Compute today's date string format: yyyy-mm-dd
+    const todayObj = new Date();
+    const yyyy = todayObj.getFullYear();
+    const mm = String(todayObj.getMonth() + 1).padStart(2, '0');
+    const dd = String(todayObj.getDate()).padStart(2, '0');
+    const dateString = `${yyyy}-${mm}-${dd}`;
+
+    // Query today's non-deleted attendance
+    const attendanceSnapshot = await db.collection('attendance')
+      .where('userId', '==', matchedUid)
+      .where('date', '==', dateString)
+      .where('isDeleted', '==', false)
+      .get();
+
+    let existingRecord = null;
+    let existingDocId = null;
+
+    attendanceSnapshot.forEach(doc => {
+      existingRecord = doc.data();
+      existingDocId = doc.id;
+    });
+
+    const now = new Date();
+    const batch = db.batch();
+
+    if (!existingRecord) {
+      // 1. Create check-in entry
+      const settings = getLocalSettings();
+      const cutoffStr = settings.lateCutoffTime || '09:30';
+      const [cutoffHour, cutoffMinute] = cutoffStr.split(':').map(Number);
+      
+      const currentHour = now.getHours();
+      const currentMinute = now.getMinutes();
+      
+      let status = 'Present';
+      if (currentHour > cutoffHour || (currentHour === cutoffHour && currentMinute > cutoffMinute)) {
+        status = 'Late';
+      }
+
+      const attendanceRef = db.collection('attendance').doc();
+      const attendanceId = attendanceRef.id;
+
+      const newAttendance = {
+        userId: matchedUid,
+        role: userData.role || 'staff',
+        date: dateString,
+        checkIn: now,
+        checkOut: null,
+        status: status,
+        markedBy: 'fingerprint',
+        isDeleted: false,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        markedByUserId: 'fingerprint-scanner'
+      };
+
+      batch.set(attendanceRef, newAttendance);
+
+      // Audit Log
+      const auditLogRef = db.collection('auditLogs').doc();
+      batch.set(auditLogRef, {
+        action: 'create',
+        targetCollection: 'attendance',
+        targetDocId: attendanceId,
+        performedBy: 'fingerprint-scanner',
+        performedByName: 'Biometric Scanner Station',
+        timestamp: admin.firestore.FieldValue.serverTimestamp(),
+        reason: 'Fingerprint check-in verified'
+      });
+
+      await batch.commit();
+      console.log(`[Background Listener] Check-in registered for ${name} (Status: ${status})`);
+
+      if (mainWindow) {
+        mainWindow.webContents.send('attendance:scanned', { 
+          success: true, 
+          name, 
+          status: `Checked In (${status})`, 
+          time: now.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }) 
+        });
+      }
+    } else if (!existingRecord.checkOut) {
+      // 2. Perform check-out update
+      const attendanceRef = db.collection('attendance').doc(existingDocId);
+      const checkOutUpdate = {
+        checkOut: now,
+        status: existingRecord.status || 'Present',
+        lastEditedBy: 'fingerprint-scanner',
+        lastEditedAt: admin.firestore.FieldValue.serverTimestamp()
+      };
+
+      batch.update(attendanceRef, checkOutUpdate);
+
+      // Audit Log
+      const auditLogRef = db.collection('auditLogs').doc();
+      batch.set(auditLogRef, {
+        action: 'update',
+        targetCollection: 'attendance',
+        targetDocId: existingDocId,
+        performedBy: 'fingerprint-scanner',
+        performedByName: 'Biometric Scanner Station',
+        timestamp: admin.firestore.FieldValue.serverTimestamp(),
+        reason: 'Fingerprint check-out verified',
+        previousData: existingRecord,
+        newData: { ...existingRecord, ...checkOutUpdate }
+      });
+
+      await batch.commit();
+      console.log(`[Background Listener] Check-out recorded for ${name}`);
+
+      if (mainWindow) {
+        mainWindow.webContents.send('attendance:scanned', { 
+          success: true, 
+          name, 
+          status: 'Checked Out', 
+          time: now.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }) 
+        });
+      }
+    } else {
+      // 3. Already completed check-in & check-out today
+      console.log(`[Background Listener] User ${name} already checked out today.`);
+      if (mainWindow) {
+        mainWindow.webContents.send('attendance:scanned', { 
+          success: false, 
+          error: `${name} has already checked out today.` 
+        });
+      }
+    }
+  } catch (err) {
+    console.error('[Background Listener] Attendance logic failed:', err.message);
+    if (mainWindow) {
+      mainWindow.webContents.send('attendance:scanned', { success: false, error: `Database error: ${err.message}` });
+    }
+  }
+}
 
 ipcMain.on('auth:role-changed', (event, role) => {
   currentUserRole = role;
   console.log(`[Main Process] Received auth:role-changed event. Role: ${role}`);
 });
 
+ipcMain.handle('fingerprint:match-templates', async (event, temp1, temp2) => {
+  try {
+    const score = await fingerprintSdk.matchTemplates(temp1, temp2);
+    console.log(`[Fingerprint IPC] Match templates score: ${score}`);
+    return { success: true, score };
+  } catch (err) {
+    console.error('[Fingerprint IPC] Match failed:', err.message);
+    return { success: false, error: err.message };
+  }
+});
+
+ipcMain.handle('fingerprint:merge-templates', async (event, temp1, temp2, temp3) => {
+  try {
+    const mergedTemplate = await fingerprintSdk.mergeTemplates(temp1, temp2, temp3);
+    console.log('[Fingerprint IPC] Merge templates successful.');
+    return { success: true, template: mergedTemplate };
+  } catch (err) {
+    console.error('[Fingerprint IPC] Merge failed:', err.message);
+    return { success: false, error: err.message };
+  }
+});
+
+ipcMain.on('fingerprint:update-cache', (event, { uid, template }) => {
+  enrolledTemplatesCache.set(uid, template);
+  console.log(`[Main Process] Updated in-memory fingerprint cache for user: ${uid} (Total cache size: ${enrolledTemplatesCache.size})`);
+});
+
+ipcMain.on('fingerprint:remove-cache', (event, uid) => {
+  enrolledTemplatesCache.delete(uid);
+  console.log(`[Main Process] Removed user from fingerprint cache: ${uid} (Total cache size: ${enrolledTemplatesCache.size})`);
+});
+
+app.on('before-quit', () => {
+  app.isQuitting = true;
+});
+
 app.whenReady().then(() => {
   createWindow();
+  createTray();
 
   app.on('activate', function () {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
@@ -488,15 +831,19 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', function () {
-  // Shut down static server on exit
-  if (staticServer) {
-    staticServer.close();
-  }
   // Close fingerprint SDK device on exit
   fingerprintSdk.closeDevice().catch(err => {
     console.error('[Fingerprint SDK] Close failed on exit:', err);
   });
-  if (process.platform !== 'darwin') app.quit();
+  
+  // Shut down static server on exit
+  if (staticServer) {
+    staticServer.close();
+  }
+
+  if (process.platform !== 'darwin' && app.isQuitting) {
+    app.quit();
+  }
 });
 
 

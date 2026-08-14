@@ -69,6 +69,14 @@ function App() {
             } 
           />
           <Route 
+            path="enroll-staff" 
+            element={
+              <ProtectedRoute requiredRole="admin">
+                <DashboardHome view="enroll-staff" />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
             path="audit-log" 
             element={
               <ProtectedRoute requiredRole="admin">

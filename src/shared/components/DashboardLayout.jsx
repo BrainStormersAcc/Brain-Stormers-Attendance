@@ -13,6 +13,7 @@ import {
   Settings,
   Lock,
   Smile,
+  Fingerprint,
   Check,
   RefreshCw,
   ClipboardList,
@@ -21,6 +22,8 @@ import {
   ChevronDown,
   ChevronUp,
   Calendar,
+  CheckCircle2,
+  AlertCircle,
   Layers,
   ArrowLeft,
   ArrowRight,
@@ -63,6 +66,107 @@ function DashboardLayout() {
   const [modalOpen, setModalOpen] = useState(false);
   const [submittingCheckin, setSubmittingCheckin] = useState(false);
   const [checkinSuccess, setCheckinSuccess] = useState(false);
+
+  // Fingerprint Diagnostics Dropdown states
+  const [fpDropdownOpen, setFpDropdownOpen] = useState(false);
+  const [fpStatus, setFpStatus] = useState('Ready (DLL verified)');
+  const [fpMessageColor, setFpMessageColor] = useState('var(--text-secondary)');
+  const [fpLoading, setFpLoading] = useState(false);
+  const [dbStatus, setDbStatus] = useState({ success: false, message: 'Connecting...' });
+  const fpDropdownRef = useRef(null);
+
+  // Close fp dropdown on click outside
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (fpDropdownRef.current && !fpDropdownRef.current.contains(event.target)) {
+        setFpDropdownOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Fetch initial connection status
+  useEffect(() => {
+    if (window.settingsAPI && window.settingsAPI.checkFirebaseStatus) {
+      window.settingsAPI.checkFirebaseStatus()
+        .then(status => {
+          if (status.success) {
+            setDbStatus({ success: true, message: `Connected — ${status.staffCount} active staff found` });
+          } else {
+            setDbStatus({ success: false, message: `Disconnected: ${status.error || 'Not Configured'}` });
+          }
+        })
+        .catch(err => {
+          setDbStatus({ success: false, message: `Disconnected: ${err.message}` });
+        });
+    }
+
+    if (window.settingsAPI && window.settingsAPI.onFirebaseStatusChanged) {
+      window.settingsAPI.onFirebaseStatusChanged((status) => {
+        if (status.success) {
+          setDbStatus({ success: true, message: `Connected — ${status.staffCount} active staff found` });
+        } else {
+          setDbStatus({ success: false, message: `Disconnected: ${status.error || 'Not Configured'}` });
+        }
+      });
+    }
+  }, []);
+
+  const handleTestCapture = async () => {
+    setFpLoading(true);
+    setFpStatus('Initializing reader...');
+    setFpMessageColor('var(--text-secondary)');
+
+    try {
+      if (!window.fingerprintAPI) {
+        throw new Error('Biometric API not available.');
+      }
+
+      const initRes = await window.fingerprintAPI.initDevice();
+      if (!initRes.success) {
+        throw new Error(initRes.error || 'Initialization failed');
+      }
+
+      setFpStatus('Sensor active! Place finger...');
+      setFpMessageColor('#3b82f6');
+
+      const capRes = await window.fingerprintAPI.captureFingerprint(20000);
+      if (!capRes.success) {
+        throw new Error(capRes.error || 'Capture failed');
+      }
+
+      setFpStatus(`Captured! size: ${capRes.length} bytes`);
+      setFpMessageColor('#10b981');
+    } catch (err) {
+      setFpStatus(`Error: ${err.message}`);
+      setFpMessageColor('#ef4444');
+    } finally {
+      if (window.fingerprintAPI) {
+        await window.fingerprintAPI.closeDevice();
+      }
+      setFpLoading(false);
+    }
+  };
+
+  const [scannedResult, setScannedResult] = useState(null);
+
+  useEffect(() => {
+    if (window.settingsAPI && window.settingsAPI.onAttendanceScanned) {
+      const handleScan = (result) => {
+        console.log('[DashboardLayout] Received background biometrics scan result:', result);
+        setScannedResult(result);
+        
+        // Auto-dismiss after 4 seconds
+        const timer = setTimeout(() => {
+          setScannedResult(null);
+        }, 4000);
+        return () => clearTimeout(timer);
+      };
+      
+      window.settingsAPI.onAttendanceScanned(handleScan);
+    }
+  }, []);
 
   useEffect(() => {
     if (['/admin-settings', '/staff-management'].includes(location.pathname)) {
@@ -464,6 +568,7 @@ function DashboardLayout() {
       subItems: [
         { name: 'Admin Settings', path: '/admin-settings', icon: Settings },
         { name: 'Staff Account Management', path: '/staff-management', icon: Users },
+        { name: 'Enroll Staff', path: '/enroll-staff', icon: Fingerprint },
       ]
     },
     (isStaff || isAdmin) && {
@@ -721,7 +826,7 @@ function DashboardLayout() {
       </aside>
 
       {/* Main Content Area */}
-      <div style={{ flex: 1, marginLeft: '338px', display: 'flex', flexDirection: 'column' }} className="main-container">
+      <div style={{ flex: 1, marginLeft: '338px', display: 'flex', flexDirection: 'column', minWidth: 0 }} className="main-container">
         
         {/* Top Header */}
         <header className="floating-navbar">
@@ -788,6 +893,26 @@ function DashboardLayout() {
                 background: transparent;
                 border-color: transparent;
               }
+              @keyframes slideDown {
+                from { opacity: 0; transform: translateY(-10px); }
+                to { opacity: 1; transform: translateY(0); }
+              }
+              .pulse-anim {
+                animation: pulse 1.5s infinite;
+              }
+              @keyframes pulse {
+                0% { opacity: 0.6; transform: scale(0.95); }
+                50% { opacity: 1; transform: scale(1.05); }
+                100% { opacity: 0.6; transform: scale(0.95); }
+              }
+              @keyframes fadeIn {
+                from { opacity: 0; }
+                to { opacity: 1; }
+              }
+              @keyframes scaleUp {
+                from { transform: scale(0.9); opacity: 0; }
+                to { transform: scale(1); opacity: 1; }
+              }
             `}</style>
             <button 
               onClick={() => navigate(-1)} 
@@ -809,6 +934,104 @@ function DashboardLayout() {
 
           <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '20px' }}>
             
+            {/* Fingerprint Diagnostics Dropdown (Admin Only) */}
+            {isAdmin && (
+              <div ref={fpDropdownRef} style={{ position: 'relative' }}>
+                <button
+                  onClick={() => setFpDropdownOpen(!fpDropdownOpen)}
+                  style={{
+                    background: 'var(--bg-surface)',
+                    border: '1px solid var(--border-color)',
+                    borderRadius: '50%',
+                    width: '38px',
+                    height: '38px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: 'pointer',
+                    boxShadow: fpDropdownOpen ? 'var(--neu-shadow-pressed-sm)' : 'var(--neu-shadow-raised-sm)',
+                    color: fpDropdownOpen ? 'var(--color-primary)' : 'var(--text-primary)',
+                    transition: 'all 0.2s ease',
+                    outline: 'none'
+                  }}
+                  title="Biometric Diagnostics"
+                >
+                  <Fingerprint size={16} className={fpStatus.includes('Place') ? 'pulse-anim' : ''} />
+                </button>
+
+                {/* Dropdown Menu */}
+                {fpDropdownOpen && (
+                  <div className="neu-card-raised" style={{
+                    position: 'absolute',
+                    top: '50px',
+                    right: '0',
+                    width: '280px',
+                    backgroundColor: 'var(--bg-surface)',
+                    border: '1px solid var(--border-color)',
+                    borderRadius: '20px',
+                    boxShadow: '0 10px 25px rgba(0,0,0,0.3), var(--neu-shadow-raised)',
+                    padding: '20px',
+                    zIndex: 1000,
+                    animation: 'slideDown 0.2s ease-out',
+                    textAlign: 'left'
+                  }}>
+                    <h4 style={{ margin: '0 0 12px 0', fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 600 }}>
+                      🔍 Fingerprint Tester
+                    </h4>
+                    <div style={{
+                      fontSize: '0.8rem',
+                      marginBottom: '12px',
+                      background: '#13151a',
+                      boxShadow: 'inset -2px -2px 4px #252932, inset 2px 2px 4px #13151a',
+                      padding: '8px 12px',
+                      borderRadius: '10px',
+                      minHeight: '40px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      wordBreak: 'break-all',
+                      color: fpMessageColor
+                    }}>
+                      {fpStatus}
+                    </div>
+                    <button
+                      onClick={handleTestCapture}
+                      disabled={fpLoading}
+                      style={{
+                        width: '100%',
+                        padding: '10px',
+                        backgroundColor: 'var(--bg-surface)',
+                        border: '1px solid var(--border-color)',
+                        color: 'var(--text-primary)',
+                        fontWeight: 600,
+                        fontSize: '0.8rem',
+                        borderRadius: '10px',
+                        boxShadow: 'var(--neu-shadow-raised-sm)',
+                        cursor: fpLoading ? 'not-allowed' : 'pointer',
+                        opacity: fpLoading ? 0.6 : 1,
+                        outline: 'none',
+                        transition: 'all 0.1s ease'
+                      }}
+                    >
+                      {fpLoading ? 'Scanning...' : 'Test Capture'}
+                    </button>
+
+                    <div style={{ borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '12px', marginTop: '12px' }}>
+                      <h4 style={{ margin: '0 0 8px 0', fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 600 }}>
+                        🔥 Firestore Status
+                      </h4>
+                      <div style={{
+                        fontSize: '0.75rem',
+                        fontWeight: 500,
+                        color: dbStatus.success ? '#10b981' : '#ef4444'
+                      }}>
+                        {dbStatus.message}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Theme Toggle */}
             <NeuThemeToggle />
 
@@ -999,7 +1222,7 @@ function DashboardLayout() {
         </header>
 
         {/* Page Yield Outlet */}
-        <main style={{ flex: 1, padding: '40px', maxWidth: '1200px', width: '100%', margin: '0 auto', position: 'relative' }}>
+        <main style={{ flex: 1, padding: '40px', maxWidth: '1200px', width: '100%', margin: '0 auto', position: 'relative', minWidth: 0 }}>
           {pageTransitioning && (
             <div className="page-transition-overlay">
               <Loader size={45} type={getLoaderType()} style={{ padding: 0 }} />
@@ -1715,6 +1938,7 @@ function DashboardLayout() {
           }
           .main-container {
             margin-left: 0 !important;
+            min-width: 0 !important;
           }
           .mobile-menu-btn {
             display: block !important;
@@ -1726,6 +1950,88 @@ function DashboardLayout() {
           }
         }
       `}</style>
+
+      {/* Full-screen Biometric Confirmation Overlay */}
+      {scannedResult && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(28, 31, 38, 0.95)',
+          backdropFilter: 'blur(8px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 99999,
+          animation: 'fadeIn 0.25s ease-out'
+        }}>
+          <div className="neu-card-raised" style={{
+            padding: '48px',
+            borderRadius: '28px',
+            backgroundColor: 'var(--bg-surface)',
+            border: '1px solid var(--border-color)',
+            boxShadow: 'var(--neu-shadow-raised)',
+            textAlign: 'center',
+            maxWidth: '450px',
+            width: '90%',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: '24px',
+            animation: 'scaleUp 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)'
+          }}>
+            
+            {/* Status indicator circle */}
+            <div style={{
+              width: '80px',
+              height: '80px',
+              borderRadius: '50%',
+              backgroundColor: scannedResult.success ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+              border: `1px solid ${scannedResult.success ? 'var(--color-success)' : 'var(--color-danger)'}`,
+              boxShadow: 'var(--neu-shadow-raised-sm)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}>
+              {scannedResult.success ? (
+                <CheckCircle2 size={40} style={{ color: 'var(--color-success)' }} />
+              ) : (
+                <AlertCircle size={40} style={{ color: 'var(--color-danger)' }} />
+              )}
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <h2 style={{ fontSize: '1.8rem', margin: 0, fontWeight: 700, color: 'var(--text-primary)' }}>
+                {scannedResult.success ? scannedResult.name : 'Biometrics Scan'}
+              </h2>
+              <p style={{
+                fontSize: '1.1rem',
+                margin: 0,
+                fontWeight: 600,
+                color: scannedResult.success ? 'var(--color-success)' : 'var(--color-danger)'
+              }}>
+                {scannedResult.success ? scannedResult.status : scannedResult.error}
+              </p>
+            </div>
+
+            {scannedResult.success && (
+              <div style={{
+                fontSize: '0.9rem',
+                color: 'var(--text-secondary)',
+                background: '#13151a',
+                boxShadow: 'inset -2px -2px 4px #252932, inset 2px 2px 4px #13151a',
+                padding: '8px 20px',
+                borderRadius: '10px',
+                fontWeight: 500
+              }}>
+                🕒 Time: {scannedResult.time}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

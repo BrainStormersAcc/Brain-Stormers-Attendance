@@ -7,6 +7,7 @@ const dllPath = 'C:\\Windows\\System32\\libzkfp.dll';
 
 let lib = null;
 let hDevice = null;
+let hDBCache = null;
 let deviceWidth = 0;
 let deviceHeight = 0;
 let deviceDpi = 0;
@@ -23,6 +24,11 @@ let ZKFPM_OpenDevice = null;
 let ZKFPM_CloseDevice = null;
 let ZKFPM_GetCaptureParamsEx = null;
 let ZKFPM_AcquireFingerprint = null;
+
+let ZKFPM_DBInit = null;
+let ZKFPM_DBFree = null;
+let ZKFPM_DBMatch = null;
+let ZKFPM_DBMerge = null;
 
 function loadDll() {
   if (lib) return;
@@ -52,6 +58,26 @@ function loadDll() {
       HANDLE,
       koffi.out(koffi.pointer('unsigned char')),
       'unsigned int',
+      koffi.out(koffi.pointer('unsigned char')),
+      koffi.inout(koffi.pointer('unsigned int'))
+    ]);
+
+    ZKFPM_DBInit = lib.func('__stdcall', 'ZKFPM_DBInit', HANDLE, []);
+    ZKFPM_DBFree = lib.func('__stdcall', 'ZKFPM_DBFree', 'int', [HANDLE]);
+    
+    ZKFPM_DBMatch = lib.func('__stdcall', 'ZKFPM_DBMatch', 'int', [
+      HANDLE,
+      koffi.pointer('unsigned char'),
+      'unsigned int',
+      koffi.pointer('unsigned char'),
+      'unsigned int'
+    ]);
+    
+    ZKFPM_DBMerge = lib.func('__stdcall', 'ZKFPM_DBMerge', 'int', [
+      HANDLE,
+      koffi.pointer('unsigned char'),
+      koffi.pointer('unsigned char'),
+      koffi.pointer('unsigned char'),
       koffi.out(koffi.pointer('unsigned char')),
       koffi.inout(koffi.pointer('unsigned int'))
     ]);
@@ -94,6 +120,14 @@ async function initDevice() {
     hDevice = null;
     ZKFPM_Terminate();
     throw new Error('Failed to open the fingerprint scanner device.');
+  }
+
+  // Initialize DB cache
+  hDBCache = ZKFPM_DBInit();
+  if (!hDBCache || koffi.address(hDBCache) === 0) {
+    console.error('[ZKFinger SDK] Failed to initialize DB cache.');
+  } else {
+    console.log('[ZKFinger SDK] DB cache initialized successfully.');
   }
 
   // Query device parameters
@@ -188,6 +222,12 @@ async function closeDevice() {
     console.log('[ZKFinger SDK] Fingerprint device connection closed.');
   }
 
+  if (hDBCache) {
+    ZKFPM_DBFree(hDBCache);
+    hDBCache = null;
+    console.log('[ZKFinger SDK] DB cache freed.');
+  }
+
   if (lib) {
     ZKFPM_Terminate();
     lib = null;
@@ -197,8 +237,50 @@ async function closeDevice() {
   return { success: true };
 }
 
+/**
+ * Merge three pre-registered templates into one registered template.
+ */
+async function mergeTemplates(temp1Base64, temp2Base64, temp3Base64) {
+  if (!hDBCache) {
+    throw new Error('Database cache is not initialized.');
+  }
+
+  const temp1 = Buffer.from(temp1Base64, 'base64');
+  const temp2 = Buffer.from(temp2Base64, 'base64');
+  const temp3 = Buffer.from(temp3Base64, 'base64');
+  
+  const regTemp = Buffer.alloc(2048);
+  let cbRegTemp = [2048];
+
+  const ret = ZKFPM_DBMerge(hDBCache, temp1, temp2, temp3, regTemp, cbRegTemp);
+  if (ret !== 0) {
+    throw new Error(`Failed to merge templates (code: ${ret})`);
+  }
+
+  const actualLength = cbRegTemp[0];
+  const mergedSlice = regTemp.slice(0, actualLength);
+  return mergedSlice.toString('base64');
+}
+
+/**
+ * Match two fingerprint templates. Returns the match score (> 0 matches).
+ */
+async function matchTemplates(temp1Base64, temp2Base64) {
+  if (!hDBCache) {
+    throw new Error('Database cache is not initialized.');
+  }
+
+  const temp1 = Buffer.from(temp1Base64, 'base64');
+  const temp2 = Buffer.from(temp2Base64, 'base64');
+
+  const score = ZKFPM_DBMatch(hDBCache, temp1, temp1.length, temp2, temp2.length);
+  return score;
+}
+
 module.exports = {
   initDevice,
   captureFingerprint,
-  closeDevice
+  closeDevice,
+  mergeTemplates,
+  matchTemplates
 };

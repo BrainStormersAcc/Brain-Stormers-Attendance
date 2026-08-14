@@ -128,6 +128,49 @@
       color: var(--color-danger);
     }
 
+    .time-item, .period-item {
+      padding: 6px 12px;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      cursor: pointer;
+      color: var(--text-secondary);
+      transition: all 0.2s ease;
+      width: 80%;
+      text-align: center;
+      user-select: none;
+    }
+    .time-item:hover, .period-item:hover {
+      background: var(--bg-surface);
+      color: var(--text-primary);
+    }
+    .time-item.selected, .period-item.selected {
+      background: var(--color-primary);
+      color: #ffffff;
+      box-shadow: 0 2px 8px rgba(59, 130, 246, 0.4);
+      font-weight: 600;
+    }
+    .custom-scroll::-webkit-scrollbar {
+      width: 4px;
+    }
+    .custom-scroll::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    .custom-scroll::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 2px;
+    }
+    .custom-scroll::-webkit-scrollbar-thumb:hover {
+      background: rgba(255, 255, 255, 0.25);
+    }
+    .neu-card-raised {
+      background: var(--bg-surface-elevated);
+      box-shadow: -8px -8px 16px var(--color-shadow-light), 8px 8px 16px var(--color-shadow-dark);
+    }
+    @keyframes slideDown {
+      from { opacity: 0; transform: translateY(-10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
     .btn-group {
       display: flex;
       gap: 12px;
@@ -182,12 +225,55 @@
       </div>
     </div>
 
-    <div class="form-group" style="margin-bottom: 24px;">
+    <div class="form-group" style="margin-bottom: 20px;">
       <label for="serviceAccountInput">Firebase Service Account Key (.json)</label>
       <div style="display: flex; gap: 8px; align-items: center;">
         <input type="text" id="serviceAccountInput" placeholder="No file selected" readonly 
                style="flex: 1; padding: 12px; background: var(--bg-surface); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 12px; box-shadow: var(--neu-shadow-pressed); font-size: 0.85rem; outline: none; box-sizing: border-box; text-overflow: ellipsis; white-space: nowrap; overflow: hidden;" />
         <button type="button" id="browseBtn" style="flex: 0 0 100px; padding: 12px; margin: 0;">Browse</button>
+      </div>
+    </div>
+
+    <div class="form-group" style="margin-bottom: 24px; position: relative;">
+      <label>Late Cutoff Time (HH:MM)</label>
+      
+      <!-- Custom selector input display -->
+      <div id="cutoffDisplay" style="display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; background: var(--bg-surface); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 12px; box-shadow: var(--neu-shadow-pressed); font-size: 0.85rem; cursor: pointer; user-select: none;">
+        <span id="cutoffValueText">09:30 AM</span>
+        <span style="color: var(--text-secondary); font-size: 0.9rem;">🕒</span>
+      </div>
+
+      <!-- Dropdown picker panel -->
+      <div id="timePickerDropdown" class="neu-card-raised" style="display: none; position: absolute; top: 68px; left: 0; right: 0; border: 1px solid var(--border-color); border-radius: 18px; padding: 16px; z-index: 100; animation: slideDown 0.2s ease-out; flex-direction: column; gap: 14px;">
+        <div style="display: flex; justify-content: space-around; gap: 8px;">
+          
+          <!-- Hour scroll list -->
+          <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 1;">
+            <span style="font-size: 0.7rem; color: var(--text-secondary); font-weight: 600;">Hour</span>
+            <div id="hourScroll" class="custom-scroll" style="display: flex; flex-direction: column; align-items: center; width: 100%; max-height: 110px; overflow-y: auto; gap: 4px; padding: 4px 0;">
+              <!-- Dynamically populated -->
+            </div>
+          </div>
+          
+          <!-- Minute scroll list -->
+          <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 1;">
+            <span style="font-size: 0.7rem; color: var(--text-secondary); font-weight: 600;">Min</span>
+            <div id="minuteScroll" class="custom-scroll" style="display: flex; flex-direction: column; align-items: center; width: 100%; max-height: 110px; overflow-y: auto; gap: 4px; padding: 4px 0;">
+              <!-- Dynamically populated -->
+            </div>
+          </div>
+
+          <!-- AM/PM selector -->
+          <div style="display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 0 0 60px;">
+            <span style="font-size: 0.7rem; color: var(--text-secondary); font-weight: 600;">Period</span>
+            <div style="display: flex; flex-direction: column; gap: 8px; justify-content: center; height: 110px; align-items: center; width: 100%;">
+              <div class="period-item selected" data-val="AM">AM</div>
+              <div class="period-item" data-val="PM">PM</div>
+            </div>
+          </div>
+        </div>
+
+        <button type="button" id="closeTimePicker" class="accent" style="margin: 0; padding: 10px; font-size: 0.8rem; border-radius: 10px; width: 100%;">Confirm Time</button>
       </div>
     </div>
 
@@ -210,6 +296,128 @@
     const serviceAccountInput = document.getElementById('serviceAccountInput');
     const browseBtn = document.getElementById('browseBtn');
 
+    // Custom Time Picker DOM Elements
+    const cutoffDisplay = document.getElementById('cutoffDisplay');
+    const cutoffValueText = document.getElementById('cutoffValueText');
+    const timePickerDropdown = document.getElementById('timePickerDropdown');
+    const hourScroll = document.getElementById('hourScroll');
+    const minuteScroll = document.getElementById('minuteScroll');
+    const closeTimePicker = document.getElementById('closeTimePicker');
+
+    // Custom Time Picker State Variables
+    let selectedHour = "09";
+    let selectedMinute = "30";
+    let selectedPeriod = "AM";
+
+    // Populate Hour Scroll List (01 - 12)
+    for (let i = 1; i <= 12; i++) {
+      const hr = String(i).padStart(2, '0');
+      const item = document.createElement('div');
+      item.className = 'time-item' + (hr === selectedHour ? ' selected' : '');
+      item.textContent = hr;
+      item.dataset.val = hr;
+      item.addEventListener('click', (e) => {
+        hourScroll.querySelectorAll('.time-item').forEach(el => el.classList.remove('selected'));
+        item.classList.add('selected');
+        selectedHour = hr;
+        updateTimeText();
+      });
+      hourScroll.appendChild(item);
+    }
+
+    // Populate Minute Scroll List (00 - 59)
+    for (let i = 0; i < 60; i++) {
+      const min = String(i).padStart(2, '0');
+      const item = document.createElement('div');
+      item.className = 'time-item' + (min === selectedMinute ? ' selected' : '');
+      item.textContent = min;
+      item.dataset.val = min;
+      item.addEventListener('click', (e) => {
+        minuteScroll.querySelectorAll('.time-item').forEach(el => el.classList.remove('selected'));
+        item.classList.add('selected');
+        selectedMinute = min;
+        updateTimeText();
+      });
+      minuteScroll.appendChild(item);
+    }
+
+    // AM/PM Period Selection listeners
+    document.querySelectorAll('.period-item').forEach(item => {
+      item.addEventListener('click', () => {
+        document.querySelectorAll('.period-item').forEach(el => el.classList.remove('selected'));
+        item.classList.add('selected');
+        selectedPeriod = item.dataset.val;
+        updateTimeText();
+      });
+    });
+
+    // Helper to update display box text
+    function updateTimeText() {
+      cutoffValueText.textContent = `${selectedHour}:${selectedMinute} ${selectedPeriod}`;
+    }
+
+    // Helper to convert "09:30" (24h) to display state
+    function loadTimeSetting(timeStr) {
+      if (!timeStr) timeStr = "09:30";
+      const [hrs, mins] = timeStr.split(':').map(Number);
+      const period = hrs >= 12 ? 'PM' : 'AM';
+      const dispHours = hrs % 12 === 0 ? 12 : hrs % 12;
+      
+      selectedHour = String(dispHours).padStart(2, '0');
+      selectedMinute = String(mins).padStart(2, '0');
+      selectedPeriod = period;
+
+      updateTimeText();
+
+      // Highlight selected items in lists
+      hourScroll.querySelectorAll('.time-item').forEach(el => {
+        el.classList.toggle('selected', el.dataset.val === selectedHour);
+      });
+      minuteScroll.querySelectorAll('.time-item').forEach(el => {
+        el.classList.toggle('selected', el.dataset.val === selectedMinute);
+      });
+      document.querySelectorAll('.period-item').forEach(el => {
+        el.classList.toggle('selected', el.dataset.val === selectedPeriod);
+      });
+    }
+
+    // Helper to convert current selection back to "09:30" (24h) for save
+    function getSelected24hTime() {
+      let hours = parseInt(selectedHour, 10);
+      if (selectedPeriod === 'PM' && hours < 12) hours += 12;
+      if (selectedPeriod === 'AM' && hours === 12) hours = 0;
+      return `${String(hours).padStart(2, '0')}:${selectedMinute}`;
+    }
+
+    // Toggle Dropdown
+    cutoffDisplay.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const isOpen = timePickerDropdown.style.display === 'flex';
+      timePickerDropdown.style.display = isOpen ? 'none' : 'flex';
+      
+      if (!isOpen) {
+        // Auto-scroll selected elements into view smoothly when opening
+        setTimeout(() => {
+          const selHour = hourScroll.querySelector('.time-item.selected');
+          const selMinute = minuteScroll.querySelector('.time-item.selected');
+          if (selHour) selHour.scrollIntoView({ block: 'center', behavior: 'smooth' });
+          if (selMinute) selMinute.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        }, 100);
+      }
+    });
+
+    closeTimePicker.addEventListener('click', (e) => {
+      e.stopPropagation();
+      timePickerDropdown.style.display = 'none';
+    });
+
+    // Close on click outside
+    document.addEventListener('click', (e) => {
+      if (!timePickerDropdown.contains(e.target) && e.target !== cutoffDisplay) {
+        timePickerDropdown.style.display = 'none';
+      }
+    });
+
     // Show status logs
     const showMessage = (msg, isError = false) => {
       alertBox.textContent = msg;
@@ -224,7 +432,7 @@
     // Load active devices list via PWA authenticated bridge
     const loadDevices = async () => {
       selectEl.disabled = true;
-      saveBtn.disabled = true;
+      saveBtn.disabled = !serviceAccountInput.value;
       refreshBtn.disabled = true;
       selectEl.innerHTML = '<option value="">Searching for devices...</option>';
       hideMessage();
@@ -237,6 +445,7 @@
           selectEl.innerHTML = '<option value="">No devices registered centrally</option>';
           showMessage("No active devices found. Make sure you are registered and logged in as Admin in the main window.", true);
           refreshBtn.disabled = false;
+          saveBtn.disabled = !serviceAccountInput.value;
           return;
         }
 
@@ -254,12 +463,13 @@
 
         selectEl.disabled = false;
         refreshBtn.disabled = false;
-        if (selectEl.value || serviceAccountInput.value) saveBtn.disabled = false;
+        saveBtn.disabled = !selectEl.value && !serviceAccountInput.value;
       } catch (err) {
         console.error("Fetch devices failure:", err);
         selectEl.innerHTML = '<option value="">Failed to fetch devices</option>';
         showMessage("Failed to sync devices. Note: You must log into the Admin panel in the main window before syncing.", true);
         refreshBtn.disabled = false;
+        saveBtn.disabled = !serviceAccountInput.value;
       }
     };
 
@@ -309,6 +519,7 @@
           deviceName: device ? device.deviceName : (savedSettings.deviceName || null),
           licenseKey: device ? device.licenseKey : (savedSettings.licenseKey || null),
           serviceAccountKeyPath: serviceAccountInput.value || null,
+          lateCutoffTime: getSelected24hTime(),
           lastSyncedAt: new Date().toISOString()
         });
 
@@ -334,6 +545,7 @@
         if (savedSettings.serviceAccountKeyPath) {
           serviceAccountInput.value = savedSettings.serviceAccountKeyPath;
         }
+        loadTimeSetting(savedSettings.lateCutoffTime || '09:30');
       } catch (e) {
         console.error("Local settings load failed:", e);
       }
