@@ -3,3 +3,10 @@ dist/
 release/
 *.log
 .DS_Store
+
+# Firebase service account keys
+service-account*.json
+*.privatekey.json
+
+# Firebase service account folder
+FireAPI/

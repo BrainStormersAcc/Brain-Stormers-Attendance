@@ -5,6 +5,14 @@ contextBridge.exposeInMainWorld('settingsAPI', {
   getLocalSettings: () => ipcRenderer.invoke('get-local-settings'),
   saveLocalSettings: (settings) => ipcRenderer.invoke('save-local-settings', settings),
   closeSettingsWindow: () => ipcRenderer.send('close-settings-window'),
+  selectServiceAccountKey: () => ipcRenderer.invoke('settings:select-service-account'),
+  checkFirebaseStatus: () => ipcRenderer.invoke('firebase:check-status'),
+  onFirebaseStatusChanged: (callback) => ipcRenderer.on('firebase:status-changed', (event, status) => callback(status)),
+  notifyRole: (role) => {
+    console.log('[Preload] notifyRole invoked with role:', role);
+    ipcRenderer.send('auth:role-changed', role);
+    handleRoleChange(role);
+  },
   
   // IPC bridging for authenticated Firestore requests via the main window session
   requestDevices: () => ipcRenderer.invoke('request-devices'),
@@ -27,8 +35,56 @@ contextBridge.exposeInMainWorld('fingerprintAPI', {
   closeDevice: () => ipcRenderer.invoke('fingerprint:close')
 });
 
+let currentRole = null;
+let domLoaded = false;
+
+function handleRoleChange(role) {
+  console.log('[Preload] handleRoleChange invoked with role:', role, 'domLoaded:', domLoaded);
+  currentRole = role;
+  
+  if (!domLoaded) {
+    console.log('[Preload] DOM not loaded yet. Caching role and waiting.');
+    return;
+  }
+
+  // Exclude settings and error subpages from widget injection
+  if (window.location.href.includes('settings.html') || window.location.href.includes('error.html')) {
+    console.log('[Preload] Skipping widget on helper page:', window.location.href);
+    return;
+  }
+
+  const existingWidget = document.getElementById('fp-test-widget');
+  console.log('[Preload] Existing widget in DOM:', !!existingWidget);
+
+  if (role === 'admin') {
+    if (!existingWidget) {
+      console.log('[Preload] Widget not found. Calling createWidget()...');
+      createWidget();
+    } else {
+      console.log('[Preload] Widget found. Setting display = block');
+      existingWidget.style.display = 'block';
+    }
+  } else {
+    if (existingWidget) {
+      console.log('[Preload] Role is not admin. Setting display = none');
+      existingWidget.style.display = 'none';
+    }
+  }
+}
+
 window.addEventListener('DOMContentLoaded', () => {
+  console.log('[Preload] DOMContentLoaded event triggered. cached role:', currentRole);
+  domLoaded = true;
+  if (currentRole) {
+    handleRoleChange(currentRole);
+  }
+});
+
+function createWidget() {
+  if (document.getElementById('fp-test-widget')) return;
+
   const style = document.createElement('style');
+  style.id = 'fp-test-widget-style';
   style.innerHTML = `
     #fp-test-widget {
       position: fixed;
@@ -106,25 +162,33 @@ window.addEventListener('DOMContentLoaded', () => {
       <span class="close-btn" id="fp-minimize">➖</span>
     </h3>
     <div class="status" id="fp-status">Ready (DLL verified)</div>
-    <button id="fp-test-btn">Test Capture</button>
+    <button id="fp-test-btn" style="margin-bottom: 12px;">Test Capture</button>
+    <div id="db-section" style="border-top: 1px solid rgba(255, 255, 255, 0.05); padding-top: 12px; margin-top: 12px;">
+      <h3 style="margin-bottom: 8px; font-size: 0.8rem; color: #8a9ab8; font-weight: 600;">🔥 Firestore Status</h3>
+      <div class="status" id="db-status" style="min-height: auto; font-size: 0.75rem;">Connecting...</div>
+    </div>
   `;
   document.body.appendChild(widget);
 
   const statusEl = document.getElementById('fp-status');
   const btnEl = document.getElementById('fp-test-btn');
   const minimizeEl = document.getElementById('fp-minimize');
+  const dbSection = document.getElementById('db-section');
+  const dbStatusEl = document.getElementById('db-status');
   let minimized = false;
 
   minimizeEl.addEventListener('click', () => {
     if (!minimized) {
       statusEl.style.display = 'none';
       btnEl.style.display = 'none';
+      dbSection.style.display = 'none';
       widget.style.width = '160px';
       minimizeEl.textContent = '➕';
       minimized = true;
     } else {
       statusEl.style.display = 'flex';
       btnEl.style.display = 'block';
+      dbSection.style.display = 'block';
       widget.style.width = '260px';
       minimizeEl.textContent = '➖';
       minimized = false;
@@ -160,4 +224,26 @@ window.addEventListener('DOMContentLoaded', () => {
       btnEl.disabled = false;
     }
   });
-});
+
+  // Database status handlers
+  const updateDbStatus = (status) => {
+    if (status.success) {
+      dbStatusEl.textContent = `Connected — ${status.staffCount} active staff found`;
+      dbStatusEl.style.color = '#10b981';
+    } else {
+      dbStatusEl.textContent = `Disconnected: ${status.error || 'Not Configured'}`;
+      dbStatusEl.style.color = '#ef4444';
+    }
+  };
+
+  ipcRenderer.on('firebase:status-changed', (event, status) => {
+    updateDbStatus(status);
+  });
+
+  // Query initial status
+  ipcRenderer.invoke('firebase:check-status')
+    .then(updateDbStatus)
+    .catch(err => {
+      updateDbStatus({ success: false, error: err.message });
+    });
+}

@@ -27,13 +27,13 @@
       background-color: var(--bg-base);
       color: var(--text-primary);
       display: flex;
-      align-items: center;
+      align-items: flex-start;
       justify-content: center;
       min-height: 100vh;
       margin: 0;
       padding: 20px;
       box-sizing: border-box;
-      overflow: hidden;
+      overflow-y: auto;
     }
     
     .card {
@@ -182,6 +182,15 @@
       </div>
     </div>
 
+    <div class="form-group" style="margin-bottom: 24px;">
+      <label for="serviceAccountInput">Firebase Service Account Key (.json)</label>
+      <div style="display: flex; gap: 8px; align-items: center;">
+        <input type="text" id="serviceAccountInput" placeholder="No file selected" readonly 
+               style="flex: 1; padding: 12px; background: var(--bg-surface); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 12px; box-shadow: var(--neu-shadow-pressed); font-size: 0.85rem; outline: none; box-sizing: border-box; text-overflow: ellipsis; white-space: nowrap; overflow: hidden;" />
+        <button type="button" id="browseBtn" style="flex: 0 0 100px; padding: 12px; margin: 0;">Browse</button>
+      </div>
+    </div>
+
     <div class="btn-group">
       <button type="button" id="cancelBtn">Cancel</button>
       <button type="button" id="refreshBtn" class="accent">Fetch Devices</button>
@@ -198,6 +207,8 @@
     const refreshBtn = document.getElementById('refreshBtn');
     const cancelBtn = document.getElementById('cancelBtn');
     const alertBox = document.getElementById('alertBox');
+    const serviceAccountInput = document.getElementById('serviceAccountInput');
+    const browseBtn = document.getElementById('browseBtn');
 
     // Show status logs
     const showMessage = (msg, isError = false) => {
@@ -243,7 +254,7 @@
 
         selectEl.disabled = false;
         refreshBtn.disabled = false;
-        if (selectEl.value) saveBtn.disabled = false;
+        if (selectEl.value || serviceAccountInput.value) saveBtn.disabled = false;
       } catch (err) {
         console.error("Fetch devices failure:", err);
         selectEl.innerHTML = '<option value="">Failed to fetch devices</option>';
@@ -254,7 +265,20 @@
 
     // Enable/disable Save button on dropdown change
     selectEl.addEventListener('change', () => {
-      saveBtn.disabled = !selectEl.value;
+      saveBtn.disabled = !selectEl.value && !serviceAccountInput.value;
+    });
+
+    // Browse for JSON file
+    browseBtn.addEventListener('click', async () => {
+      try {
+        const filePath = await window.settingsAPI.selectServiceAccountKey();
+        if (filePath) {
+          serviceAccountInput.value = filePath;
+          saveBtn.disabled = false;
+        }
+      } catch (err) {
+        console.error('File dialog error:', err);
+      }
     });
 
     // Cancel / close settings window
@@ -272,32 +296,33 @@
       const selectedId = selectEl.value;
       const device = fetchedDevices.find(d => d.id === selectedId);
       
-      if (!device) return;
-
       saveBtn.disabled = true;
       selectEl.disabled = true;
       refreshBtn.disabled = true;
-      showMessage("Saving settings and activating device...");
+      browseBtn.disabled = true;
+      showMessage("Saving settings and initializing connection...");
 
       try {
         // Save settings to local userData file via Electron API (this triggers ZKFinger init and Firestore update)
         await window.settingsAPI.saveLocalSettings({
-          deviceId: device.id,
-          deviceName: device.deviceName,
-          licenseKey: device.licenseKey,
+          deviceId: device ? device.id : (savedSettings.deviceId || null),
+          deviceName: device ? device.deviceName : (savedSettings.deviceName || null),
+          licenseKey: device ? device.licenseKey : (savedSettings.licenseKey || null),
+          serviceAccountKeyPath: serviceAccountInput.value || null,
           lastSyncedAt: new Date().toISOString()
         });
 
-        showMessage("Activation key successfully synchronized and cached!");
+        showMessage("Configuration saved and connection initialized!");
         setTimeout(() => {
           window.settingsAPI.closeSettingsWindow();
         }, 1500);
       } catch (err) {
         console.error("Failed to save settings:", err);
-        showMessage("Failed to save settings.", true);
+        showMessage(`Failed to save settings: ${err.message}`, true);
         saveBtn.disabled = false;
         selectEl.disabled = false;
         refreshBtn.disabled = false;
+        browseBtn.disabled = false;
       }
     });
 
@@ -306,6 +331,9 @@
       // Load current local cached settings
       try {
         savedSettings = await window.settingsAPI.getLocalSettings() || {};
+        if (savedSettings.serviceAccountKeyPath) {
+          serviceAccountInput.value = savedSettings.serviceAccountKeyPath;
+        }
       } catch (e) {
         console.error("Local settings load failed:", e);
       }

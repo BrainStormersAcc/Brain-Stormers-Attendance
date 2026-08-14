@@ -17,6 +17,7 @@
   "author": "Brain Stormers",
   "license": "ISC",
   "dependencies": {
+    "firebase-admin": "^12.1.0",
     "koffi": "^2.9.1"
   },
   "devDependencies": {

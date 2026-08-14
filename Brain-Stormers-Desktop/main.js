@@ -1,8 +1,9 @@
-const { app, BrowserWindow, Menu, ipcMain } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const http = require('http');
 const fingerprintSdk = require('./src/main/fingerprintSdk');
+const firebaseAdmin = require('./src/main/firebaseAdmin');
 
 let mainWindow;
 let settingsWindow;
@@ -36,6 +37,22 @@ function saveLocalSettings(settings) {
     
     // Initialize/sync mock ZKFinger SDK with the new key!
     initializeZKFingerSDK(settings.licenseKey, settings.deviceName);
+
+    // Initialize Firebase Admin with new key path
+    if (settings.serviceAccountKeyPath) {
+      firebaseAdmin.initializeAdmin(settings.serviceAccountKeyPath)
+        .then(() => firebaseAdmin.testConnection())
+        .then(count => {
+          if (mainWindow) {
+            mainWindow.webContents.send('firebase:status-changed', { success: true, staffCount: count });
+          }
+        })
+        .catch(err => {
+          if (mainWindow) {
+            mainWindow.webContents.send('firebase:status-changed', { success: false, error: err.message });
+          }
+        });
+    }
   } catch (e) {
     console.error('Failed to write local device settings:', e);
   }
@@ -202,12 +219,17 @@ function createWindow() {
     }
   });
 
+  // Forward renderer process logs to the main process console
+  mainWindow.webContents.on('console-message', (event, level, message, line, sourceId) => {
+    console.log(`[Renderer Console] ${message}`);
+  });
+
   // Lock window title to prevent web overrides
   mainWindow.on('page-title-updated', (event) => {
     event.preventDefault();
   });
 
-  // Register local keyboard shortcuts for Refresh (Ctrl+R), Hard Refresh (Ctrl+Shift+R), Settings (Ctrl+Shift+S) and Mock Scan (Ctrl+Shift+F)
+  // Register local keyboard shortcuts for Refresh (Ctrl+R), Hard Refresh (Ctrl+Shift+R), Settings (Ctrl+Shift+S), DevTools (Ctrl+Shift+I), and Mock Scan (Ctrl+Shift+F)
   mainWindow.webContents.on('before-input-event', (event, input) => {
     if (input.type === 'keyDown' && input.control && input.key.toLowerCase() === 'r') {
       if (input.shift) {
@@ -216,6 +238,15 @@ function createWindow() {
       } else {
         console.log('Performing standard reload...');
         mainWindow.webContents.reload();
+      }
+      event.preventDefault();
+    }
+
+    // Ctrl + Shift + I toggles developer tools (only in development)
+    if (input.type === 'keyDown' && input.control && input.shift && input.key.toLowerCase() === 'i') {
+      if (!app.isPackaged) {
+        console.log('Toggling Developer Tools...');
+        mainWindow.webContents.toggleDevTools();
       }
       event.preventDefault();
     }
@@ -250,6 +281,22 @@ function createWindow() {
   // 4. Initialize ZKFinger SDK mock with local cached settings
   const localSettings = getLocalSettings();
   initializeZKFingerSDK(localSettings.licenseKey, localSettings.deviceName);
+
+  // Initialize Firebase Admin with local cached settings
+  if (localSettings.serviceAccountKeyPath) {
+    firebaseAdmin.initializeAdmin(localSettings.serviceAccountKeyPath)
+      .then(() => firebaseAdmin.testConnection())
+      .then(count => {
+        if (mainWindow) {
+          mainWindow.webContents.send('firebase:status-changed', { success: true, staffCount: count });
+        }
+      })
+      .catch(err => {
+        if (mainWindow) {
+          mainWindow.webContents.send('firebase:status-changed', { success: false, error: err.message });
+        }
+      });
+  }
 
   // 3. Start local HTTP server to host dist/ and bypass file:// protocol issues
   startLocalServer((port) => {
@@ -388,6 +435,48 @@ ipcMain.handle('fingerprint:close', async () => {
     console.error('[Fingerprint IPC] Close failed:', err.message);
     return { success: false, error: err.message };
   }
+});
+
+// Firebase Admin IPC Handlers
+ipcMain.handle('settings:select-service-account', async () => {
+  const parentWindow = settingsWindow || mainWindow;
+  if (!parentWindow) return null;
+  
+  const result = await dialog.showOpenDialog(parentWindow, {
+    title: 'Select Firebase Service Account JSON Key',
+    filters: [
+      { name: 'JSON Files', extensions: ['json'] }
+    ],
+    properties: ['openFile']
+  });
+
+  if (result.canceled || result.filePaths.length === 0) {
+    return null;
+  }
+  return result.filePaths[0];
+});
+
+ipcMain.handle('firebase:check-status', async () => {
+  const localSettings = getLocalSettings();
+  if (!localSettings.serviceAccountKeyPath) {
+    return { success: false, error: 'Not Configured' };
+  }
+
+  try {
+    await firebaseAdmin.initializeAdmin(localSettings.serviceAccountKeyPath);
+    const count = await firebaseAdmin.testConnection();
+    return { success: true, staffCount: count };
+  } catch (err) {
+    console.error('[Firebase IPC] Status check failed:', err.message);
+    return { success: false, error: err.message };
+  }
+});
+
+let currentUserRole = null;
+
+ipcMain.on('auth:role-changed', (event, role) => {
+  currentUserRole = role;
+  console.log(`[Main Process] Received auth:role-changed event. Role: ${role}`);
 });
 
 app.whenReady().then(() => {

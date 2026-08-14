@@ -1,3 +1,4 @@
+console.log('[AuthContext] EFFECT FILE LOADED');
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { auth, db } from '../config/firebase.js';
 import { 
@@ -47,6 +48,20 @@ export function AuthProvider({ children }) {
 
     return unsubscribe;
   }, []);
+
+  // Sync user role changes to Electron host
+  useEffect(() => {
+    console.log('[AuthContext] userProfile changed:', userProfile);
+    console.log('[AuthContext] window.settingsAPI present:', !!window.settingsAPI);
+    if (window.settingsAPI) {
+      console.log('[AuthContext] window.settingsAPI.notifyRole present:', !!window.settingsAPI.notifyRole);
+    }
+    if (window.settingsAPI && window.settingsAPI.notifyRole) {
+      const role = userProfile?.role || null;
+      console.log('[AuthContext] Calling notifyRole with role:', role);
+      window.settingsAPI.notifyRole(role);
+    }
+  }, [userProfile]);
 
   // Global key listener for Ctrl+Shift+Alt+A shortcut
   useEffect(() => {
