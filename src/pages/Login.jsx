@@ -7,7 +7,7 @@ import NeuButton from '../shared/components/NeuButton.jsx';
 import NeuThemeToggle from '../shared/components/NeuThemeToggle.jsx';
 import { Mail, Lock } from 'lucide-react';
 import { db } from '../config/firebase.js';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, collection, getDocs, query, where } from 'firebase/firestore';
 import logo from '../assets/logo.png';
 
 export default function Login() {
@@ -24,25 +24,52 @@ export default function Login() {
     setError('');
 
     try {
-      // 1. Sign in via Firebase Auth
-      const userCredential = await login(email, password);
-      const user = userCredential.user;
+      const searchName = email.trim();
+      let resolvedEmail = searchName;
+      let resolvedRole = null;
 
-      // 2. Fetch user profile role from Firestore for instant redirection
-      const userDocRef = doc(db, 'users', user.uid);
-      const userDoc = await getDoc(userDocRef);
-
-      if (userDoc.exists()) {
-        const profile = userDoc.data();
-        if (profile.role === 'staff') {
-          navigate('/staff-attendance', { replace: true });
-        } else if (profile.role === 'admin') {
-          navigate('/', { replace: true });
+      // Perform pre-authentication lookup to bypass Firestore auth token synchronization race condition
+      if (!searchName.includes('@')) {
+        // Look up by lowercase username document ID
+        const indexDocRef = doc(db, 'usernameIndex', searchName.toLowerCase());
+        const indexDoc = await getDoc(indexDocRef);
+        if (indexDoc.exists()) {
+          const indexData = indexDoc.data();
+          resolvedEmail = indexData.email;
+          resolvedRole = indexData.role;
         } else {
-          setError('Unrecognized user role.');
+          // Fallback if not indexed
+          resolvedEmail = `${searchName}@brainstormers.internal`;
         }
       } else {
-        setError('User profile registration records missing.');
+        // Look up by email query
+        const q = query(collection(db, 'usernameIndex'), where('email', '==', searchName.toLowerCase()));
+        const querySnapshot = await getDocs(q);
+        querySnapshot.forEach(doc => {
+          resolvedRole = doc.data().role;
+        });
+      }
+
+      // 1. Sign in via Firebase Auth
+      const userCredential = await login(resolvedEmail, password);
+      const user = userCredential.user;
+
+      // 2. Determine redirection (prefer pre-auth resolved role, fall back to post-auth users read if missing)
+      let role = resolvedRole;
+      if (!role && user) {
+        const userDocRef = doc(db, 'users', user.uid);
+        const userDoc = await getDoc(userDocRef);
+        if (userDoc.exists()) {
+          role = userDoc.data().role;
+        }
+      }
+
+      if (role === 'staff') {
+        navigate('/staff-attendance', { replace: true });
+      } else if (role === 'admin') {
+        navigate('/', { replace: true });
+      } else {
+        setError('Unrecognized user role or registration profile missing.');
       }
     } catch (err) {
       console.error('Login failure:', err);

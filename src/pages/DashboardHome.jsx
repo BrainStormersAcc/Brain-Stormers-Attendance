@@ -41,6 +41,7 @@ import Skeleton from '../shared/components/Skeleton.jsx';
 import { db } from '../config/firebase.js';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import EnrollStaff from './EnrollStaff.jsx';
+import { getLocalTodayString, getTeamStats, getPersonalStats } from '../services/attendanceStats.js';
 
 export default function DashboardHome(props) {
   const activeTab = props.view || 'overview';
@@ -168,31 +169,13 @@ export default function DashboardHome(props) {
     setLoading(true);
     setError('');
     try {
-      if (userProfile.role === 'admin') {
-        const staff = await getAllStaff();
-        setStaffList(staff);
-        
-        const logs = await getAllAttendance();
-        setAttendanceLogs(logs);
-        setFilteredLogs(logs);
-      } else {
-        // Staff user: Fetch only their own profile and logs
-        setStaffList([{ uid: currentUser.uid, name: userProfile.name, active: true, username: userProfile.username }]);
-        
-        const attendanceRef = collection(db, 'attendance');
-        const q = query(attendanceRef, where('userId', '==', currentUser.uid));
-        const querySnapshot = await getDocs(q);
-        
-        const logs = [];
-        querySnapshot.forEach(doc => {
-          const data = doc.data();
-          if (data.isDeleted !== true) {
-            logs.push({ id: doc.id, ...data });
-          }
-        });
-        setAttendanceLogs(logs);
-        setFilteredLogs(logs);
-      }
+      // Both admin and staff now view team-wide directories and attendance logs
+      const staff = await getAllStaff();
+      setStaffList(staff);
+      
+      const logs = await getAllAttendance();
+      setAttendanceLogs(logs);
+      setFilteredLogs(logs);
     } catch (err) {
       console.error('Error fetching dashboard data:', err);
       setError('Failed to fetch registry data from server.');
@@ -386,59 +369,10 @@ export default function DashboardHome(props) {
     return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
   };
 
-  // Stats calculation
-  const activeStaffCount = staffList.filter(s => s.active).length;
-  const presentCount = attendanceLogs.filter(log => {
-    const today = new Date().toISOString().split('T')[0];
-    return log.date === today && log.status === 'present';
-  }).length;
-
-  // Get elapsed working days in the current month up to today (excluding Fridays)
-  const getElapsedWorkingDays = () => {
-    const today = new Date();
-    const year = today.getFullYear();
-    const month = today.getMonth();
-    let workingDays = 0;
-    for (let d = 1; d <= today.getDate(); d++) {
-      const date = new Date(year, month, d);
-      const dayOfWeek = date.getDay(); // 5 = Friday
-      if (dayOfWeek !== 5) {
-        workingDays++;
-      }
-    }
-    return workingDays;
-  };
-
-  const elapsedWorkingDays = getElapsedWorkingDays();
-
-  // Personal present days count in current month
-  const currentMonthStr = new Date().toISOString().substring(0, 7); // "YYYY-MM"
-  const myPresentCount = attendanceLogs.filter(log => 
-    log.userId === currentUser?.uid && 
-    log.date.startsWith(currentMonthStr) && 
-    (log.status === 'present' || log.status === 'late')
-  ).length;
-
-  const myLateCount = attendanceLogs.filter(log => 
-    log.userId === currentUser?.uid && 
-    log.date.startsWith(currentMonthStr) && 
-    log.status === 'late'
-  ).length;
-
-  const myAbsentCount = Math.max(0, elapsedWorkingDays - myPresentCount);
-
-  const myAttendancePct = elapsedWorkingDays > 0 
-    ? Math.min(100, Math.round((myPresentCount / elapsedWorkingDays) * 100)) 
-    : 0;
-
-  const todayStr = new Date().toISOString().split('T')[0];
-  const todayRecord = attendanceLogs.find(log => log.userId === currentUser?.uid && log.date === todayStr);
-  let myStatusToday = 'Not marked yet';
-  if (todayRecord) {
-    if (todayRecord.status === 'present') myStatusToday = 'Present';
-    else if (todayRecord.status === 'late') myStatusToday = 'Present (Late)';
-    else if (todayRecord.status === 'absent') myStatusToday = 'Absent';
-  }
+  // Stats calculation using centralized service
+  const todayStr = getLocalTodayString();
+  const { activeStaffCount, presentCount, lateCount, absentCount } = getTeamStats(staffList, attendanceLogs);
+  const { myStatusToday, myPresentCount, myLateCount, myAbsentCount, myAttendancePct } = getPersonalStats(currentUser?.uid, attendanceLogs);
 
   // Filtered staff list for registry search
   const filteredStaffList = staffList.filter(member => {
@@ -678,7 +612,76 @@ export default function DashboardHome(props) {
                     </>
                   ) : (
                     <>
-                      {/* Personal Status Today Card */}
+                      {/* Staff Present Today */}
+                      <NeuCard variant="raised" style={{ padding: '24px', display: 'flex', gap: '20px', alignItems: 'center' }}>
+                        <div style={{
+                          width: '54px',
+                          height: '54px',
+                          borderRadius: 'var(--border-radius-md)',
+                          backgroundColor: 'var(--bg-surface-elevated)',
+                          boxShadow: 'var(--neu-shadow-pressed-sm)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: 'var(--color-success)'
+                        }}>
+                          <Clock size={24} />
+                        </div>
+                        <div>
+                          <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Staff Present Today</p>
+                          <h3 style={{ fontSize: '1.75rem', fontWeight: 700 }}>
+                            {presentCount} / {activeStaffCount}
+                          </h3>
+                        </div>
+                      </NeuCard>
+
+                      {/* Staff Absent Today */}
+                      <NeuCard variant="raised" style={{ padding: '24px', display: 'flex', gap: '20px', alignItems: 'center' }}>
+                        <div style={{
+                          width: '54px',
+                          height: '54px',
+                          borderRadius: 'var(--border-radius-md)',
+                          backgroundColor: 'var(--bg-surface-elevated)',
+                          boxShadow: 'var(--neu-shadow-pressed-sm)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: 'var(--color-danger)'
+                        }}>
+                          <AlertCircle size={24} />
+                        </div>
+                        <div>
+                          <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Staff Absent Today</p>
+                          <h3 style={{ fontSize: '1.75rem', fontWeight: 700 }}>
+                            {absentCount}
+                          </h3>
+                        </div>
+                      </NeuCard>
+
+                      {/* Staff Late Today */}
+                      <NeuCard variant="raised" style={{ padding: '24px', display: 'flex', gap: '20px', alignItems: 'center' }}>
+                        <div style={{
+                          width: '54px',
+                          height: '54px',
+                          borderRadius: 'var(--border-radius-md)',
+                          backgroundColor: 'var(--bg-surface-elevated)',
+                          boxShadow: 'var(--neu-shadow-pressed-sm)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: 'var(--color-warning)'
+                        }}>
+                          <Clock size={24} />
+                        </div>
+                        <div>
+                          <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Staff Late Today</p>
+                          <h3 style={{ fontSize: '1.75rem', fontWeight: 700 }}>
+                            {lateCount}
+                          </h3>
+                        </div>
+                      </NeuCard>
+
+                      {/* My Status Today */}
                       <NeuCard variant="raised" style={{ padding: '24px', display: 'flex', gap: '20px', alignItems: 'center' }}>
                         <div style={{
                           width: '54px',
@@ -694,78 +697,9 @@ export default function DashboardHome(props) {
                           <Clock size={24} />
                         </div>
                         <div>
-                          <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Your Status Today</p>
+                          <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>My Status Today</p>
                           <h3 style={{ fontSize: '1.5rem', fontWeight: 700, color: myStatusToday.startsWith('Present') ? 'var(--color-success)' : myStatusToday === 'Absent' ? 'var(--color-danger)' : 'var(--text-primary)' }}>
                             {myStatusToday}
-                          </h3>
-                        </div>
-                      </NeuCard>
-
-                      {/* Personal Attendance Rate Card */}
-                      <NeuCard variant="raised" style={{ padding: '24px', display: 'flex', gap: '20px', alignItems: 'center' }}>
-                        <div style={{
-                          width: '54px',
-                          height: '54px',
-                          borderRadius: 'var(--border-radius-md)',
-                          backgroundColor: 'var(--bg-surface-elevated)',
-                          boxShadow: 'var(--neu-shadow-pressed-sm)',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          color: 'var(--color-primary)'
-                        }}>
-                          <TrendingUp size={24} />
-                        </div>
-                        <div>
-                          <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Attendance Rate (Month)</p>
-                          <h3 style={{ fontSize: '1.75rem', fontWeight: 700, color: myAttendancePct >= 90 ? 'var(--color-success)' : myAttendancePct >= 75 ? 'var(--color-warning)' : 'var(--color-danger)' }}>
-                            {myAttendancePct}%
-                          </h3>
-                        </div>
-                      </NeuCard>
-
-                      {/* Personal Present Days Card */}
-                      <NeuCard variant="raised" style={{ padding: '24px', display: 'flex', gap: '20px', alignItems: 'center' }}>
-                        <div style={{
-                          width: '54px',
-                          height: '54px',
-                          borderRadius: 'var(--border-radius-md)',
-                          backgroundColor: 'var(--bg-surface-elevated)',
-                          boxShadow: 'var(--neu-shadow-pressed-sm)',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          color: 'var(--color-success)'
-                        }}>
-                          <CheckCircle2 size={24} />
-                        </div>
-                        <div>
-                          <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Days Present (Month)</p>
-                          <h3 style={{ fontSize: '1.75rem', fontWeight: 700 }}>
-                            {myPresentCount} Days
-                          </h3>
-                        </div>
-                      </NeuCard>
-
-                      {/* Personal Absent/Late Days Card */}
-                      <NeuCard variant="raised" style={{ padding: '24px', display: 'flex', gap: '20px', alignItems: 'center' }}>
-                        <div style={{
-                          width: '54px',
-                          height: '54px',
-                          borderRadius: 'var(--border-radius-md)',
-                          backgroundColor: 'var(--bg-surface-elevated)',
-                          boxShadow: 'var(--neu-shadow-pressed-sm)',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          color: 'var(--color-warning)'
-                        }}>
-                          <Calendar size={24} />
-                        </div>
-                        <div>
-                          <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Days Late / Absent</p>
-                          <h3 style={{ fontSize: '1.75rem', fontWeight: 700 }}>
-                            {myLateCount} L / {myAbsentCount} A
                           </h3>
                         </div>
                       </NeuCard>
@@ -1235,9 +1169,10 @@ export default function DashboardHome(props) {
                           const name = staffMember ? staffMember.name : 'Unknown User';
                           
                           let statusColor = 'var(--text-primary)';
-                          if (log.status === 'present') statusColor = 'var(--color-success)';
-                          if (log.status === 'late') statusColor = 'var(--color-warning)';
-                          if (log.status === 'absent') statusColor = 'var(--color-danger)';
+                          const statusLower = log.status?.toLowerCase();
+                          if (statusLower === 'present') statusColor = 'var(--color-success)';
+                          else if (statusLower === 'late') statusColor = 'var(--color-warning)';
+                          else if (statusLower === 'absent') statusColor = 'var(--color-danger)';
 
                           return (
                             <tr key={log.id} style={{ borderBottom: '1px solid var(--border-color)', fontSize: '0.95rem' }}>

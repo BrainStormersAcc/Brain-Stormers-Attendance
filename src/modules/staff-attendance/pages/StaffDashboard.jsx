@@ -40,6 +40,7 @@ import {
   serverTimestamp
 } from 'firebase/firestore';
 import { getAllStaff, getAllAttendance } from '../../../services/adminService.js';
+import { getLocalTodayString, getWorkingDaysInRange, getTeamStats, getPersonalStats, getStatsForLogs } from '../../../services/attendanceStats.js';
 
 // Configuration constant for self-edit capability window
 export const EDIT_WINDOW_MINUTES = 10;
@@ -230,30 +231,9 @@ export default function StaffDashboard() {
     setCurrentPage(1);
   }, [filterFrom, filterTo, selectedStaff, selectedStatuses]);
 
-  // Get current date string in local YYYY-MM-DD format
-  const getTodayDateString = () => {
-    const today = new Date();
-    const year = today.getFullYear();
-    const month = String(today.getMonth() + 1).padStart(2, '0');
-    const day = String(today.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  };
 
-  // Get elapsed working days in the current month up to today (excluding Fridays)
-  const getElapsedWorkingDays = () => {
-    const today = new Date();
-    const year = today.getFullYear();
-    const month = today.getMonth();
-    let workingDays = 0;
-    for (let d = 1; d <= today.getDate(); d++) {
-      const date = new Date(year, month, d);
-      const dayOfWeek = date.getDay(); // 0 = Sunday, 5 = Friday
-      if (dayOfWeek !== 5) {
-        workingDays++;
-      }
-    }
-    return workingDays;
-  };
+
+
 
   // Refactored data fetcher accessible component-wide
   const fetchRawData = async () => {
@@ -283,26 +263,10 @@ export default function StaffDashboard() {
       });
       setStaffNameMap(nameMap);
 
-      // 2. Fetch logs based on role
-      if (userProfile.role === 'admin') {
-        const allLogs = await getAllAttendance();
-        const staffLogs = allLogs.filter(log => log.role === 'staff');
-        setRawLogs(staffLogs);
-      } else {
-        // Staff View: Fetch only user's isolated logs
-        const attendanceRef = collection(db, 'attendance');
-        const q = query(attendanceRef, where('userId', '==', currentUser.uid));
-        const querySnapshot = await getDocs(q);
-        
-        const userLogs = [];
-        querySnapshot.forEach((doc) => {
-          const data = doc.data();
-          if (data.isDeleted !== true) {
-            userLogs.push({ id: doc.id, ...data });
-          }
-        });
-        setRawLogs(userLogs);
-      }
+      // 2. Fetch logs (Both admin and staff now view team-wide logs)
+      const allLogs = await getAllAttendance();
+      const staffLogs = allLogs.filter(log => log.role === 'staff');
+      setRawLogs(staffLogs);
     } catch (err) {
       console.error('Error fetching raw attendance data:', err);
       setDataError('Failed to fetch attendance logs.');
@@ -432,7 +396,7 @@ export default function StaffDashboard() {
       setManualStaffSearch('');
     }
 
-    setManualDate(getTodayDateString());
+    setManualDate(getLocalTodayString());
     setManualCheckIn('');
     setManualCheckOut('');
     setManualStatus('present');
@@ -495,7 +459,7 @@ export default function StaffDashboard() {
         setManualSubmitting(false);
         return;
       }
-      const todayStr = getTodayDateString();
+      const todayStr = getLocalTodayString();
       if (manualDate > todayStr) {
         setManualError('Date cannot be in the future.');
         setManualSubmitting(false);
@@ -813,22 +777,7 @@ export default function StaffDashboard() {
     localStorage.setItem('staff-attendance-view-mode', newMode);
   };
 
-  // Calculate working days in a custom date range (excluding Fridays)
-  const getWorkingDaysInRange = (from, to) => {
-    if (!from || !to) return 0;
-    const start = new Date(from);
-    const end = new Date(to);
-    let count = 0;
-    let current = new Date(start);
-    while (current <= end) {
-      const dayOfWeek = current.getDay();
-      if (dayOfWeek !== 5) { // non-Friday
-        count++;
-      }
-      current.setDate(current.getDate() + 1);
-    }
-    return count;
-  };
+
 
   // Perform in-memory log filtering
   const getFilteredLogs = () => {
@@ -858,77 +807,45 @@ export default function StaffDashboard() {
 
   const filteredLogsList = getFilteredLogs();
 
-  // Compute live stats summary based on current filter sets
+  // Compute live stats summary based on current filter sets using centralized service
   const getSummaryStats = () => {
-    const todayStr = getTodayDateString();
+    const todayStr = getLocalTodayString();
     
     // Determine if user has changed filters from default values
     const isDefaultRange = filterFrom === getFirstDayOfCurrentMonth() && filterTo === getLastDayOfCurrentMonth();
     const workingDaysCount = getWorkingDaysInRange(filterFrom, filterTo);
 
-    if (isAdmin || isStaff) {
-      // If a staff is selected, total staff count in current context is 1, else total active staff count
-      const totalStaffCount = selectedStaff ? 1 : rawStaffList.length;
-      
-      const activeStaffInContext = selectedStaff 
-        ? rawStaffList.filter(s => s.uid === selectedStaff.uid)
-        : rawStaffList;
-      
-      const activeStaffUids = new Set(activeStaffInContext.map(s => s.uid));
+    const activeStaffInContext = selectedStaff 
+      ? rawStaffList.filter(s => s.uid === selectedStaff.uid)
+      : rawStaffList;
 
-      // Calculate today's status metrics for active staff in current filter scope
-      const todayLogs = rawLogs.filter(log => log.date === todayStr && activeStaffUids.has(log.userId));
-      const presentTodayCount = todayLogs.filter(log => log.status === 'present' || log.status === 'late').length;
-      const lateTodayCount = todayLogs.filter(log => log.status === 'late').length;
-      const absentTodayCount = Math.max(0, totalStaffCount - todayLogs.filter(log => log.status === 'present' || log.status === 'late').length);
+    const { activeStaffCount, presentCount, lateCount, absentCount } = getTeamStats(activeStaffInContext, rawLogs);
 
-      // Average Attendance over selected date range for staff in scope
-      const logsInRange = rawLogs.filter(log => 
-        log.date >= filterFrom && 
-        log.date <= filterTo && 
-        activeStaffUids.has(log.userId)
-      );
-      const presentLogsInRange = logsInRange.filter(log => log.status === 'present' || log.status === 'late').length;
+    // Average Attendance over selected date range for staff in scope
+    const activeStaffUids = new Set(activeStaffInContext.map(s => s.uid));
+    const logsInRange = rawLogs.filter(log => 
+      log.date >= filterFrom && 
+      log.date <= filterTo && 
+      activeStaffUids.has(log.userId)
+    );
+    const presentLogsInRange = logsInRange.filter(log => {
+      const statusLower = log.status?.toLowerCase();
+      return statusLower === 'present' || statusLower === 'late';
+    }).length;
 
-      let avgAttendancePct = 0;
-      if (totalStaffCount > 0 && workingDaysCount > 0) {
-        avgAttendancePct = Math.round((presentLogsInRange / (totalStaffCount * workingDaysCount)) * 100);
-      }
-
-      return {
-        presentToday: presentTodayCount,
-        totalStaff: totalStaffCount,
-        absentToday: absentTodayCount,
-        lateToday: lateTodayCount,
-        avgAttendancePct,
-        isDefaultRange
-      };
-    } else {
-      // Staff view metrics calculation (scoped by selected date range)
-      const todayRecord = rawLogs.find(log => log.date === todayStr);
-      let myStatusToday = 'Not marked yet';
-      if (todayRecord) {
-        if (todayRecord.status === 'present') myStatusToday = 'Present';
-        else if (todayRecord.status === 'late') myStatusToday = 'Present (Late)';
-        else if (todayRecord.status === 'absent') myStatusToday = 'Absent';
-      }
-
-      const logsInRange = rawLogs.filter(log => log.date >= filterFrom && log.date <= filterTo);
-      const presentDaysCount = logsInRange.filter(log => log.status === 'present' || log.status === 'late').length;
-      const absentDaysCount = Math.max(0, workingDaysCount - presentDaysCount);
-
-      const attendancePct = workingDaysCount > 0 
-        ? Math.min(100, Math.round((presentDaysCount / workingDaysCount) * 100)) 
-        : 0;
-
-      return {
-        myStatusToday,
-        presentDays: presentDaysCount,
-        absentDays: absentDaysCount,
-        attendancePct,
-        isDefaultRange
-      };
+    let avgAttendancePct = 0;
+    if (activeStaffCount > 0 && workingDaysCount > 0) {
+      avgAttendancePct = Math.round((presentLogsInRange / (activeStaffCount * workingDaysCount)) * 100);
     }
+
+    return {
+      presentToday: presentCount,
+      totalStaff: activeStaffCount,
+      absentToday: absentCount,
+      lateToday: lateCount,
+      avgAttendancePct,
+      isDefaultRange
+    };
   };
 
   const stats = getSummaryStats();
@@ -2109,7 +2026,7 @@ export default function StaffDashboard() {
         <div className="calendar-days-grid">
           {grid.map((cell, idx) => {
             const cellDateStr = getCellDateString(cell.day, cell.current);
-            const isToday = cellDateStr === getTodayDateString();
+            const isToday = cellDateStr === getLocalTodayString();
             
             // Check status indicator dots for this day
             const dayLogs = cellDateStr ? rawLogs.filter(log => log.date === cellDateStr) : [];
@@ -2119,15 +2036,16 @@ export default function StaffDashboard() {
 
             if (cellDateStr) {
               if (isAdmin) {
-                hasPresent = dayLogs.some(l => l.status === 'present');
-                hasLate = dayLogs.some(l => l.status === 'late');
-                hasAbsent = dayLogs.some(l => l.status === 'absent');
+                hasPresent = dayLogs.some(l => l.status?.toLowerCase() === 'present');
+                hasLate = dayLogs.some(l => l.status?.toLowerCase() === 'late');
+                hasAbsent = dayLogs.some(l => l.status?.toLowerCase() === 'absent');
               } else {
                 const userLog = dayLogs[0];
                 if (userLog) {
-                  if (userLog.status === 'present') hasPresent = true;
-                  else if (userLog.status === 'late') hasLate = true;
-                  else if (userLog.status === 'absent') hasAbsent = true;
+                  const statusLower = userLog.status?.toLowerCase();
+                  if (statusLower === 'present') hasPresent = true;
+                  else if (statusLower === 'late') hasLate = true;
+                  else if (statusLower === 'absent') hasAbsent = true;
                 }
               }
             }
@@ -2435,15 +2353,8 @@ export default function StaffDashboard() {
         log.date.startsWith(yPrefix)
       );
 
-      const mPresent = mLogs.filter(log => log.status === 'present' || log.status === 'late').length;
-      const mLate = mLogs.filter(log => log.status === 'late').length;
-      const mAbsent = Math.max(0, mWorkingDays - mPresent);
-      const mPct = mWorkingDays > 0 ? Math.round((mPresent / mWorkingDays) * 100) : 0;
-
-      const yPresent = yLogs.filter(log => log.status === 'present' || log.status === 'late').length;
-      const yLate = yLogs.filter(log => log.status === 'late').length;
-      const yAbsent = Math.max(0, yWorkingDays - yPresent);
-      const yPct = yWorkingDays > 0 ? Math.round((yPresent / yWorkingDays) * 100) : 0;
+      const { present: mPresent, late: mLate, absent: mAbsent, pct: mPct } = getStatsForLogs(mLogs, mWorkingDays);
+      const { present: yPresent, late: yLate, absent: yAbsent, pct: yPct } = getStatsForLogs(yLogs, yWorkingDays);
 
       return {
         uid: staff.uid,
@@ -2757,10 +2668,7 @@ export default function StaffDashboard() {
       log.date >= filterFrom && 
       log.date <= filterTo
     );
-    const present = logs.filter(log => log.status === 'present' || log.status === 'late').length;
-    const late = logs.filter(log => log.status === 'late').length;
-    const absent = Math.max(0, workingDays - present);
-    const pct = workingDays > 0 ? Math.round((present / workingDays) * 100) : 0;
+    const { present, late, absent, pct } = getStatsForLogs(logs, workingDays);
     
     return { present, absent, late, pct, logs };
   };
@@ -2800,7 +2708,7 @@ export default function StaffDashboard() {
         <div className="calendar-days-grid" style={{ gridTemplateColumns: 'repeat(7, 1fr)', gap: '12px' }}>
           {grid.map((cell, idx) => {
             const cellDateStr = getCellDateString(cell.day, cell.current);
-            const isToday = cellDateStr === getTodayDateString();
+            const isToday = cellDateStr === getLocalTodayString();
             
             // Check status indicator dots for this day for this specific staff member
             const dayLogs = cellDateStr ? rawLogs.filter(log => log.date === cellDateStr && log.userId === staffUid) : [];
@@ -2811,9 +2719,10 @@ export default function StaffDashboard() {
             if (cellDateStr) {
               const userLog = dayLogs[0];
               if (userLog) {
-                if (userLog.status === 'present') hasPresent = true;
-                else if (userLog.status === 'late') hasLate = true;
-                else if (userLog.status === 'absent') hasAbsent = true;
+                const statusLower = userLog.status?.toLowerCase();
+                if (statusLower === 'present') hasPresent = true;
+                else if (statusLower === 'late') hasLate = true;
+                else if (statusLower === 'absent') hasAbsent = true;
               } else if (cell.current) {
                 const cellDate = new Date(year, month, cell.day);
                 const today = new Date();
@@ -3097,188 +3006,208 @@ export default function StaffDashboard() {
   const renderIndividualHistoryView = () => {
     if (!selectedProfileStaff) return null;
     
-    const staff = selectedProfileStaff;
-    const { present, absent, late, pct, logs } = getIndividualStats(staff.uid);
-    const scope = getSelectedMonthScope();
+    try {
+      const staff = selectedProfileStaff;
+      const { present, absent, late, pct, logs } = getIndividualStats(staff.uid);
+      const scope = getSelectedMonthScope();
 
-    // Sort logs descending
-    const sortedLogs = [...logs].sort((a, b) => b.date.localeCompare(a.date));
+      // Sort logs descending
+      const sortedLogs = [...logs].sort((a, b) => b.date.localeCompare(a.date));
 
-    return (
-      <div className="profile-animate-fade" style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
-        {/* Back Button and Profile Header */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
-          <NeuButton 
-            onClick={() => setSelectedProfileStaff(null)}
-            style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
-          >
-            <ChevronLeft size={18} />
-            <span>Back to Profiles</span>
-          </NeuButton>
-          <h2 style={{ fontSize: '1.75rem', fontFamily: 'var(--font-display)', margin: 0 }}>
-            {staff.name}'s History
-          </h2>
-        </div>
+      return (
+        <div className="profile-animate-fade" style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
+          {/* Back Button and Profile Header */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+            <NeuButton 
+              onClick={() => setSelectedProfileStaff(null)}
+              style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+            >
+              <ChevronLeft size={18} />
+              <span>Back to Profiles</span>
+            </NeuButton>
+            <h2 style={{ fontSize: '1.75rem', fontFamily: 'var(--font-display)', margin: 0 }}>
+              {staff.name}'s History
+            </h2>
+          </div>
 
-        {/* Profile Details & Stats */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '24px' }}>
-          {/* Card 1: Attendance Rate */}
-          <NeuCard variant="raised" style={{ padding: '24px', display: 'flex', gap: '20px', alignItems: 'center' }}>
-            <div style={{
-              width: '54px',
-              height: '54px',
-              borderRadius: 'var(--border-radius-md)',
-              backgroundColor: 'var(--bg-surface-elevated)',
-              boxShadow: 'var(--neu-shadow-pressed-sm)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: 'var(--color-primary)'
-            }}>
-              <TrendingUp size={24} />
-            </div>
-            <div>
-              <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Monthly Attendance</p>
-              <h3 style={{ fontSize: '1.75rem', fontWeight: 700, color: pct >= 90 ? 'var(--color-success)' : pct >= 75 ? 'var(--color-warning)' : 'var(--color-danger)' }}>{pct}%</h3>
-            </div>
-          </NeuCard>
-
-          {/* Card 2: Present Days */}
-          <NeuCard variant="raised" style={{ padding: '24px', display: 'flex', gap: '20px', alignItems: 'center' }}>
-            <div style={{
-              width: '54px',
-              height: '54px',
-              borderRadius: 'var(--border-radius-md)',
-              backgroundColor: 'var(--bg-surface-elevated)',
-              boxShadow: 'var(--neu-shadow-pressed-sm)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: 'var(--color-success)'
-            }}>
-              <CheckCircle2 size={24} />
-            </div>
-            <div>
-              <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Present Days</p>
-              <h3 style={{ fontSize: '1.75rem', fontWeight: 700 }}>{present} Days</h3>
-            </div>
-          </NeuCard>
-
-          {/* Card 3: Late Days */}
-          <NeuCard variant="raised" style={{ padding: '24px', display: 'flex', gap: '20px', alignItems: 'center' }}>
-            <div style={{
-              width: '54px',
-              height: '54px',
-              borderRadius: 'var(--border-radius-md)',
-              backgroundColor: 'var(--bg-surface-elevated)',
-              boxShadow: 'var(--neu-shadow-pressed-sm)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: 'var(--color-warning)'
-            }}>
-              <Clock size={24} />
-            </div>
-            <div>
-              <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Late Days</p>
-              <h3 style={{ fontSize: '1.75rem', fontWeight: 700 }}>{late} Days</h3>
-            </div>
-          </NeuCard>
-
-          {/* Card 4: Absent Days */}
-          <NeuCard variant="raised" style={{ padding: '24px', display: 'flex', gap: '20px', alignItems: 'center' }}>
-            <div style={{
-              width: '54px',
-              height: '54px',
-              borderRadius: 'var(--border-radius-md)',
-              backgroundColor: 'var(--bg-surface-elevated)',
-              boxShadow: 'var(--neu-shadow-pressed-sm)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: 'var(--color-danger)'
-            }}>
-              <AlertCircle size={24} />
-            </div>
-            <div>
-              <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Absent Days</p>
-              <h3 style={{ fontSize: '1.75rem', fontWeight: 700 }}>{absent} Days</h3>
-            </div>
-          </NeuCard>
-        </div>
-
-        {/* History Details and Personal Calendar View */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '32px' }}>
-          {/* Left card: History Table */}
-          <NeuCard variant="raised" style={{ padding: '32px', overflowX: 'auto', display: 'flex', flexDirection: 'column' }}>
-            <h3 style={{ fontSize: '1.25rem', marginBottom: '20px', fontFamily: 'var(--font-display)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <FileText size={18} style={{ color: 'var(--color-primary)' }} />
-              <span>Logs ({scope.label})</span>
-            </h3>
-
-            {sortedLogs.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-secondary)' }}>
-                No attendance logs found for this period.
+          {/* Profile Details & Stats */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '24px' }}>
+            {/* Card 1: Attendance Rate */}
+            <NeuCard variant="raised" style={{ padding: '24px', display: 'flex', gap: '20px', alignItems: 'center' }}>
+              <div style={{
+                width: '54px',
+                height: '54px',
+                borderRadius: 'var(--border-radius-md)',
+                backgroundColor: 'var(--bg-surface-elevated)',
+                boxShadow: 'var(--neu-shadow-pressed-sm)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: 'var(--color-primary)'
+              }}>
+                <TrendingUp size={24} />
               </div>
-            ) : (
-              <div className="desktop-table-container">
-                <table className="neu-table">
-                  <thead>
-                    <tr>
-                      <th>Date</th>
-                      <th>Check-In</th>
-                      <th>Check-Out</th>
-                      <th>Status</th>
-                      <th>Marked By</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sortedLogs.map((log) => (
-                      <tr key={log.id || `${log.userId}_${log.date}`}>
-                        <td style={{ fontWeight: 500 }}>{formatDateLabel(log.date)}</td>
-                        <td>{formatTime(log.checkIn)}</td>
-                        <td>{log.checkOut ? formatTime(log.checkOut) : '--'}</td>
-                        <td>
-                          <NeuBadge variant={log.status}>{log.status}</NeuBadge>
-                        </td>
-                        <td style={{ textTransform: 'capitalize', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
-                          {log.markedBy || 'manual'}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              <div>
+                <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Attendance Rate</p>
+                <h3 style={{ fontSize: '1.75rem', fontWeight: 700, color: pct >= 90 ? 'var(--color-success)' : pct >= 75 ? 'var(--color-warning)' : 'var(--color-danger)' }}>
+                  {pct}%
+                </h3>
               </div>
-            )}
-          </NeuCard>
+            </NeuCard>
 
-          {/* Right card: Personal Month Calendar Grid */}
-          <NeuCard variant="raised" style={{ padding: '32px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-              <h3 style={{ fontSize: '1.25rem', margin: 0, fontFamily: 'var(--font-display)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <CalendarIcon size={18} style={{ color: 'var(--color-primary)' }} />
-                <span>Calendar View</span>
+            {/* Card 2: Present Days */}
+            <NeuCard variant="raised" style={{ padding: '24px', display: 'flex', gap: '20px', alignItems: 'center' }}>
+              <div style={{
+                width: '54px',
+                height: '54px',
+                borderRadius: 'var(--border-radius-md)',
+                backgroundColor: 'var(--bg-surface-elevated)',
+                boxShadow: 'var(--neu-shadow-pressed-sm)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: 'var(--color-success)'
+              }}>
+                <CheckCircle2 size={24} />
+              </div>
+              <div>
+                <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Present Days</p>
+                <h3 style={{ fontSize: '1.75rem', fontWeight: 700 }}>{present} Days</h3>
+              </div>
+            </NeuCard>
+
+            {/* Card 3: Late Days */}
+            <NeuCard variant="raised" style={{ padding: '24px', display: 'flex', gap: '20px', alignItems: 'center' }}>
+              <div style={{
+                width: '54px',
+                height: '54px',
+                borderRadius: 'var(--border-radius-md)',
+                backgroundColor: 'var(--bg-surface-elevated)',
+                boxShadow: 'var(--neu-shadow-pressed-sm)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: 'var(--color-warning)'
+              }}>
+                <Clock size={24} />
+              </div>
+              <div>
+                <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Late Days</p>
+                <h3 style={{ fontSize: '1.75rem', fontWeight: 700 }}>{late} Days</h3>
+              </div>
+            </NeuCard>
+
+            {/* Card 4: Absent Days */}
+            <NeuCard variant="raised" style={{ padding: '24px', display: 'flex', gap: '20px', alignItems: 'center' }}>
+              <div style={{
+                width: '54px',
+                height: '54px',
+                borderRadius: 'var(--border-radius-md)',
+                backgroundColor: 'var(--bg-surface-elevated)',
+                boxShadow: 'var(--neu-shadow-pressed-sm)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: 'var(--color-danger)'
+              }}>
+                <AlertCircle size={24} />
+              </div>
+              <div>
+                <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>Absent Days</p>
+                <h3 style={{ fontSize: '1.75rem', fontWeight: 700 }}>{absent} Days</h3>
+              </div>
+            </NeuCard>
+          </div>
+
+          {/* History Details and Personal Calendar View */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '32px' }}>
+            {/* Left card: History Table */}
+            <NeuCard variant="raised" style={{ padding: '32px', overflowX: 'auto', display: 'flex', flexDirection: 'column' }}>
+              <h3 style={{ fontSize: '1.25rem', marginBottom: '20px', fontFamily: 'var(--font-display)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <FileText size={18} style={{ color: 'var(--color-primary)' }} />
+                <span>Logs ({scope.label})</span>
               </h3>
-              {/* Calendar Navigator controls */}
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <NeuButton onClick={handlePrevCalendarMonth} style={{ padding: '8px' }}>
-                  <ChevronLeft size={16} />
-                </NeuButton>
-                <span style={{ fontSize: '0.9rem', fontWeight: 600, display: 'flex', alignItems: 'center', minWidth: '110px', justifyContent: 'center' }}>
-                  {calendarMonths[calendarViewDate.getMonth()]} {calendarViewDate.getFullYear()}
-                </span>
-                <NeuButton onClick={handleNextCalendarMonth} style={{ padding: '8px' }}>
-                  <ChevronRight size={16} />
-                </NeuButton>
+
+              {sortedLogs.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-secondary)' }}>
+                  No attendance logs found for this period.
+                </div>
+              ) : (
+                <div className="desktop-table-container">
+                  <table className="neu-table">
+                    <thead>
+                      <tr>
+                        <th>Date</th>
+                        <th>Check-In</th>
+                        <th>Check-Out</th>
+                        <th>Status</th>
+                        <th>Marked By</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {sortedLogs.map((log) => (
+                        <tr key={log.id || `${log.userId}_${log.date}`}>
+                          <td style={{ fontWeight: 500 }}>{formatDateLabel(log.date)}</td>
+                          <td>{formatTime(log.checkIn)}</td>
+                          <td>{log.checkOut ? formatTime(log.checkOut) : '--'}</td>
+                          <td>
+                            <NeuBadge variant={log.status}>{log.status}</NeuBadge>
+                          </td>
+                          <td style={{ textTransform: 'capitalize', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+                            {log.markedBy || 'manual'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </NeuCard>
+
+            {/* Right card: Personal Month Calendar Grid */}
+            <NeuCard variant="raised" style={{ padding: '32px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                <h3 style={{ fontSize: '1.25rem', margin: 0, fontFamily: 'var(--font-display)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <CalendarIcon size={18} style={{ color: 'var(--color-primary)' }} />
+                  <span>Calendar View</span>
+                </h3>
+                {/* Calendar Navigator controls */}
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <NeuButton onClick={handlePrevCalendarMonth} style={{ padding: '8px' }}>
+                    <ChevronLeft size={16} />
+                  </NeuButton>
+                  <span style={{ fontSize: '0.9rem', fontWeight: 600, display: 'flex', alignItems: 'center', minWidth: '110px', justifyContent: 'center' }}>
+                    {calendarMonths[calendarViewDate.getMonth()]} {calendarViewDate.getFullYear()}
+                  </span>
+                  <NeuButton onClick={handleNextCalendarMonth} style={{ padding: '8px' }}>
+                    <ChevronRight size={16} />
+                  </NeuButton>
+                </div>
               </div>
-            </div>
-            
-            {/* Render Calendar Day Grid filtered for this individual */}
-            {renderIndividualCalendarGrid(staff.uid)}
+              
+              {/* Render Calendar Day Grid filtered for this individual */}
+              {renderIndividualCalendarGrid(staff.uid)}
+            </NeuCard>
+          </div>
+        </div>
+      );
+    } catch (renderError) {
+      console.error('[IndividualHistoryView] Render error:', renderError);
+      return (
+        <div style={{ padding: '32px', display: 'flex', flexDirection: 'column', gap: '20px', alignItems: 'center' }}>
+          <NeuCard variant="raised" style={{ padding: '32px', maxWidth: '500px', display: 'flex', flexDirection: 'column', gap: '16px', alignItems: 'center', textAlign: 'center' }}>
+            <AlertCircle size={48} style={{ color: 'var(--color-danger)' }} />
+            <h3 style={{ fontSize: '1.25rem', fontWeight: 600 }}>Failed to Load Profile History</h3>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
+              An error occurred while loading this staff member's attendance summary.
+            </p>
+            <NeuButton onClick={() => setSelectedProfileStaff(null)}>
+              Back to Profiles List
+            </NeuButton>
           </NeuCard>
         </div>
-      </div>
-    );
+      );
+    }
   };
 
   return (

@@ -10,7 +10,7 @@ import {
   updatePassword,
   updateEmail
 } from 'firebase/auth';
-import { doc, getDoc, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, setDoc, deleteDoc, collection, getDocs } from 'firebase/firestore';
 import Loader from '../shared/components/Loader.jsx';
 
 const AuthContext = createContext();
@@ -137,6 +137,21 @@ export function AuthProvider({ children }) {
       password
     });
 
+    // Update usernameIndex lookup mapping
+    if (userProfile && userProfile.username && userProfile.username !== username) {
+      try {
+        await deleteDoc(doc(db, 'usernameIndex', userProfile.username.toLowerCase().trim()));
+      } catch (delErr) {
+        console.warn('Failed to delete old usernameIndex doc for admin:', delErr);
+      }
+    }
+    const indexDocRef = doc(db, 'usernameIndex', username.toLowerCase().trim());
+    await setDoc(indexDocRef, {
+      email: newAuthEmail,
+      role: 'admin',
+      uid: user.uid
+    });
+
     // 5. Sync updates to local state profile
     setUserProfile(prev => ({
       ...prev,
@@ -163,6 +178,33 @@ export function AuthProvider({ children }) {
       avatar
     }));
   };
+
+  // Migration: If logged-in user is admin, trigger a silent backfill of the usernameIndex collection
+  useEffect(() => {
+    if (userProfile?.role === 'admin') {
+      const runBackfill = async () => {
+        try {
+          const usersSnapshot = await getDocs(collection(db, 'users'));
+          usersSnapshot.forEach(async (uDoc) => {
+            const data = uDoc.data();
+            if (data.username) {
+              const usernameLower = data.username.toLowerCase().trim();
+              const authEmail = data.username.includes('@') ? data.username : `${data.username}@brainstormers.internal`;
+              await setDoc(doc(db, 'usernameIndex', usernameLower), {
+                email: authEmail,
+                role: data.role || 'staff',
+                uid: uDoc.id
+              });
+            }
+          });
+          console.log('[Migration] usernameIndex backfill migration complete.');
+        } catch (migErr) {
+          console.warn('[Migration] Failed to run usernameIndex backfill:', migErr);
+        }
+      };
+      runBackfill();
+    }
+  }, [userProfile]);
 
   const value = {
     currentUser,

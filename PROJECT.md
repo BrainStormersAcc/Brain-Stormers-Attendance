@@ -35,9 +35,13 @@ The system supports granular roles to manage access:
 | Role | Status | Description & Capabilities |
 | :--- | :--- | :--- |
 | **Admin** | Active | Full control. Can create staff accounts, view and manage all attendance logs, access the admin panel via a secret keyboard shortcut, and change their own password via the menu bar. |
-| **Staff** | Active (Phase 1) | Log in via admin-created credentials, mark their own attendance, view their personal attendance history, and change their own password via the menu bar. |
+| **Staff** | Active (Phase 1) | Log in via admin-created credentials, mark their own attendance, view team-wide status summaries on the dashboard overview, review attendance histories, and change their own password via the menu bar. |
 | **Student** | Planned (Phase 2) | Students will log in to view their schedules, track personal attendance metrics, and receive attendance notifications. |
 | **Teacher** | Planned (Phase 3) | Teachers will log in to mark student attendance, view class schedules, and review teaching hours. |
+
+> [!NOTE]
+> **Dashboard Team Visibility Update:**
+> To accommodate operational coordination when an Admin is offline, the Staff dashboard/Overview page operates as a shared team-wide view rather than a strictly isolated personal profile. When staff log in, they see counts of active staff who are Present, Late, or Absent today, alongside their own personal status card ("My Status Today"). Firestore security rules allow read access to the overall attendance collection for all authenticated users to support this shared status visibility.
 
 ---
 

@@ -60,6 +60,14 @@ export const createStaffAccount = async ({ name, username, phone, password }) =>
       active: true
     });
 
+    // Write mapping to usernameIndex collection for pre-auth lookup
+    const indexDocRef = doc(db, 'usernameIndex', username.toLowerCase().trim());
+    await setDoc(indexDocRef, {
+      email: authEmail,
+      role: 'staff',
+      uid: user.uid
+    });
+
     return { uid: user.uid, success: true };
   } catch (error) {
     console.error('Error in createStaffAccount:', error);
@@ -142,6 +150,21 @@ export const editStaffCredentials = async (uid, oldUsername, oldPassword, { name
       password
     });
 
+    // Update usernameIndex lookup mapping
+    if (usernameChanged && oldUsername) {
+      try {
+        await deleteDoc(doc(db, 'usernameIndex', oldUsername.toLowerCase().trim()));
+      } catch (delErr) {
+        console.warn('Failed to delete old usernameIndex doc:', delErr);
+      }
+    }
+    const indexDocRef = doc(db, 'usernameIndex', username.toLowerCase().trim());
+    await setDoc(indexDocRef, {
+      email: formatUsernameToEmail(username),
+      role: 'staff',
+      uid: uid
+    });
+
     return { success: true };
   } catch (error) {
     console.error('Error in editStaffCredentials:', error);
@@ -171,6 +194,13 @@ export const deleteStaffAccount = async (uid, username, password) => {
     const userDocRef = doc(db, 'users', uid);
     await deleteDoc(userDocRef);
 
+    // Delete mapping from usernameIndex collection
+    try {
+      await deleteDoc(doc(db, 'usernameIndex', username.toLowerCase().trim()));
+    } catch (indexErr) {
+      console.warn('Failed to delete usernameIndex mapping:', indexErr);
+    }
+
     return { success: true };
   } catch (error) {
     console.error('Error in deleteStaffAccount, attempting Firestore fallback delete:', error);
@@ -179,6 +209,13 @@ export const deleteStaffAccount = async (uid, username, password) => {
     try {
       const userDocRef = doc(db, 'users', uid);
       await deleteDoc(userDocRef);
+      
+      try {
+        await deleteDoc(doc(db, 'usernameIndex', username.toLowerCase().trim()));
+      } catch (indexErr) {
+        console.warn('Failed to delete usernameIndex mapping in fallback:', indexErr);
+      }
+
       return { success: true, firestoreOnly: true };
     } catch (dbError) {
       console.error('Failed to delete Firestore document after Auth fail:', dbError);
