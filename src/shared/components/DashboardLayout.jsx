@@ -50,6 +50,9 @@ function DashboardLayout() {
   const [isAdminPanelOpen, setIsAdminPanelOpen] = useState(() => {
     return ['/admin-settings', '/staff-management'].includes(location.pathname);
   });
+  const [isFingerIdMakerOpen, setIsFingerIdMakerOpen] = useState(() => {
+    return location.pathname === '/enroll-staff';
+  });
   const [isAttendancePanelOpen, setIsAttendancePanelOpen] = useState(() => {
     return location.pathname.startsWith('/staff-attendance');
   });
@@ -568,7 +571,14 @@ function DashboardLayout() {
       subItems: [
         { name: 'Admin Settings', path: '/admin-settings', icon: Settings },
         { name: 'Staff Account Management', path: '/staff-management', icon: Users },
-        { name: 'Enroll Staff', path: '/enroll-staff', icon: Fingerprint },
+      ]
+    },
+    isAdmin && {
+      name: 'Finger ID Maker',
+      isGroup: true,
+      icon: Fingerprint,
+      subItems: [
+        { name: 'Enroll Staff', path: '/enroll-staff', icon: Fingerprint }
       ]
     },
     (isStaff || isAdmin) && {
@@ -656,23 +666,26 @@ function DashboardLayout() {
             if (item.isGroup) {
               const isSubActive = item.subItems.some(sub => location.pathname === sub.path);
               
-              let isOpen = false;
-              if (item.name === 'Admin Control Panel') isOpen = isAdminPanelOpen;
-              else if (item.name === 'Attendance Panel') isOpen = isAttendancePanelOpen;
-              else if (item.name === 'Attendance Expands') isOpen = isAttendanceExpandsOpen;
-              else if (item.name === 'Device Management') isOpen = isDeviceManagementOpen;
-              
-              const toggleOpen = () => {
-                if (item.name === 'Admin Control Panel') {
-                  setIsAdminPanelOpen(!isAdminPanelOpen);
-                } else if (item.name === 'Attendance Panel') {
-                  setIsAttendancePanelOpen(!isAttendancePanelOpen);
-                } else if (item.name === 'Attendance Expands') {
-                  setIsAttendanceExpandsOpen(!isAttendanceExpandsOpen);
-                } else if (item.name === 'Device Management') {
-                  setIsDeviceManagementOpen(!isDeviceManagementOpen);
-                }
-              };
+               let isOpen = false;
+               if (item.name === 'Admin Control Panel') isOpen = isAdminPanelOpen;
+               else if (item.name === 'Finger ID Maker') isOpen = isFingerIdMakerOpen;
+               else if (item.name === 'Attendance Panel') isOpen = isAttendancePanelOpen;
+               else if (item.name === 'Attendance Expands') isOpen = isAttendanceExpandsOpen;
+               else if (item.name === 'Device Management') isOpen = isDeviceManagementOpen;
+               
+               const toggleOpen = () => {
+                 if (item.name === 'Admin Control Panel') {
+                   setIsAdminPanelOpen(!isAdminPanelOpen);
+                 } else if (item.name === 'Finger ID Maker') {
+                   setIsFingerIdMakerOpen(!isFingerIdMakerOpen);
+                 } else if (item.name === 'Attendance Panel') {
+                   setIsAttendancePanelOpen(!isAttendancePanelOpen);
+                 } else if (item.name === 'Attendance Expands') {
+                   setIsAttendanceExpandsOpen(!isAttendanceExpandsOpen);
+                 } else if (item.name === 'Device Management') {
+                   setIsDeviceManagementOpen(!isDeviceManagementOpen);
+                 }
+               };
 
               return (
                 <div key={idx} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
@@ -704,16 +717,8 @@ function DashboardLayout() {
                     {isOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                   </button>
                   
-                  {isOpen && (
-                    <div style={{
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: '4px',
-                      paddingLeft: '16px',
-                      borderLeft: '1px dashed var(--border-color)',
-                      marginLeft: '28px',
-                      animation: 'slideDownFast 0.2s ease-out'
-                    }}>
+                  <div className={`dropdown-transition-container ${isOpen ? 'open' : ''}`}>
+                    <div className="dropdown-transition-content">
                       {item.subItems.map((sub, sIdx) => {
                         const SubIcon = sub.icon;
                         const isSubActiveCurrent = location.pathname === sub.path;
@@ -765,7 +770,7 @@ function DashboardLayout() {
                         );
                       })}
                     </div>
-                  )}
+                  </div>
                 </div>
               );
             }
@@ -1722,6 +1727,26 @@ function DashboardLayout() {
         @keyframes slideDownFast {
           from { opacity: 0; transform: translateY(-8px); }
           to { opacity: 1; transform: translateY(0); }
+        }
+        .dropdown-transition-container {
+          display: grid;
+          grid-template-rows: 0fr;
+          transition: grid-template-rows 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+          overflow: hidden;
+          padding-left: 16px;
+          border-left: 1px dashed var(--border-color);
+          margin-left: 28px;
+        }
+        .dropdown-transition-container.open {
+          grid-template-rows: 1fr;
+          margin-top: 4px;
+          margin-bottom: 4px;
+        }
+        .dropdown-transition-content {
+          min-height: 0;
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
         }
         .sidebar-brand-header {
           display: flex;

@@ -26,7 +26,15 @@ contextBridge.exposeInMainWorld('settingsAPI', {
   onFingerprintScanned: (callback) => ipcRenderer.on('fingerprint-scanned', (event, staffData) => callback(staffData)),
   onGetTestStaff: (callback) => ipcRenderer.on('get-test-staff', (event) => callback()),
   sendTestStaff: (staffData) => ipcRenderer.send('respond-test-staff', staffData),
-  sendTestStaffError: (error) => ipcRenderer.send('respond-test-staff-error', error)
+  sendTestStaffError: (error) => ipcRenderer.send('respond-test-staff-error', error),
+  
+  // App initialization retry
+  retryInitialization: () => ipcRenderer.send('app:retry-init'),
+  onRetryResponse: (callback) => {
+    const listener = (event, status) => callback(status);
+    ipcRenderer.on('app:retry-init-response', listener);
+    return () => ipcRenderer.removeListener('app:retry-init-response', listener);
+  }
 });
 
 contextBridge.exposeInMainWorld('fingerprintAPI', {

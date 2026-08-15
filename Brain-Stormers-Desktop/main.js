@@ -212,6 +212,75 @@ function startLocalServer(callback) {
   });
 }
 
+let appInitialized = false;
+
+function initializeApplication() {
+  if (appInitialized) return true;
+
+  console.log('[Electron Startup] Checking INDEX_HTML_PATH:', INDEX_HTML_PATH);
+  const buildExists = fs.existsSync(INDEX_HTML_PATH);
+  console.log('[Electron Startup] INDEX_HTML_PATH exists:', buildExists);
+  
+  if (!buildExists) {
+    console.error("Build directory 'dist/' not found. Loading missing build error page. Expected path:", INDEX_HTML_PATH);
+    if (mainWindow) {
+      mainWindow.loadFile(path.join(__dirname, 'error.html'));
+    }
+    return false;
+  }
+
+  // Load splash loading page first
+  if (mainWindow) {
+    mainWindow.loadFile(path.join(__dirname, 'index.html'));
+  }
+
+  // Initialize ZKFinger SDK with local cached settings
+  const localSettings = getLocalSettings();
+  initializeZKFingerSDK(localSettings.licenseKey, localSettings.deviceName);
+
+  // Initialize Firebase Admin with local cached settings
+  if (localSettings.serviceAccountKeyPath) {
+    firebaseAdmin.initializeAdmin(localSettings.serviceAccountKeyPath)
+      .then(() => firebaseAdmin.testConnection())
+      .then(count => {
+        if (mainWindow) {
+          mainWindow.webContents.send('firebase:status-changed', { success: true, staffCount: count });
+        }
+        return preloadFingerprintCache().then(() => {
+          runBackgroundListeningLoop();
+        });
+      })
+      .catch(err => {
+        if (mainWindow) {
+          mainWindow.webContents.send('firebase:status-changed', { success: false, error: err.message });
+        }
+      });
+  }
+
+  // Start local HTTP server to host dist/ and bypass file:// protocol issues
+  startLocalServer((port) => {
+    // Transition after 1.5 seconds splash intro
+    setTimeout(() => {
+      if (mainWindow) {
+        mainWindow.loadURL(`http://127.0.0.1:${port}`).catch(err => {
+          console.error('Failed to load local SPA server:', err);
+          mainWindow.loadFile(path.join(__dirname, 'error.html'));
+        });
+      }
+    }, 1500);
+  });
+
+  appInitialized = true;
+  return true;
+}
+
+// IPC handler to allow retry initialization from the error page
+ipcMain.on('app:retry-init', (event) => {
+  console.log('[Main Process] Received retry initialization request...');
+  const success = initializeApplication();
+  event.reply('app:retry-init-response', { success });
+});
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1280,
@@ -286,51 +355,8 @@ function createWindow() {
     }
   });
 
-  // 1. Check if the production build dist/index.html exists
-  console.log('[Electron Startup] Checking INDEX_HTML_PATH:', INDEX_HTML_PATH);
-  console.log('[Electron Startup] INDEX_HTML_PATH exists:', fs.existsSync(INDEX_HTML_PATH));
-  if (!fs.existsSync(INDEX_HTML_PATH)) {
-    console.error("Build directory 'dist/' not found. Loading missing build error page. Expected path:", INDEX_HTML_PATH);
-    mainWindow.loadFile(path.join(__dirname, 'error.html'));
-    return;
-  }
-
-  // 2. Load splash loading page first
-  mainWindow.loadFile(path.join(__dirname, 'index.html'));
-
-  // 4. Initialize ZKFinger SDK mock with local cached settings
-  const localSettings = getLocalSettings();
-  initializeZKFingerSDK(localSettings.licenseKey, localSettings.deviceName);
-
-  // Initialize Firebase Admin with local cached settings
-  if (localSettings.serviceAccountKeyPath) {
-    firebaseAdmin.initializeAdmin(localSettings.serviceAccountKeyPath)
-      .then(() => firebaseAdmin.testConnection())
-      .then(count => {
-        if (mainWindow) {
-          mainWindow.webContents.send('firebase:status-changed', { success: true, staffCount: count });
-        }
-        return preloadFingerprintCache().then(() => {
-          runBackgroundListeningLoop();
-        });
-      })
-      .catch(err => {
-        if (mainWindow) {
-          mainWindow.webContents.send('firebase:status-changed', { success: false, error: err.message });
-        }
-      });
-  }
-
-  // 3. Start local HTTP server to host dist/ and bypass file:// protocol issues
-  startLocalServer((port) => {
-    // Transition after 1.5 seconds splash intro
-    setTimeout(() => {
-      mainWindow.loadURL(`http://127.0.0.1:${port}`).catch(err => {
-        console.error('Failed to load local SPA server:', err);
-        mainWindow.loadFile(path.join(__dirname, 'error.html'));
-      });
-    }, 1500);
-  });
+  // Attempt to initialize
+  initializeApplication();
 }
 
 function createSettingsWindow() {

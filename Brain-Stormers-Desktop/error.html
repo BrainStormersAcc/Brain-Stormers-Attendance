@@ -101,6 +101,37 @@
       box-sizing: border-box;
       margin-bottom: 10px;
     }
+    .neu-btn {
+      background: var(--bg-surface);
+      color: var(--text-primary);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      box-shadow: var(--neu-shadow-raised);
+      padding: 12px 24px;
+      font-weight: 600;
+      font-size: 0.95rem;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      outline: none;
+      transition: box-shadow 0.2s, background-color 0.2s, transform 0.2s;
+      margin-top: 20px;
+    }
+    .neu-btn:hover {
+      background: #252932;
+      transform: translateY(-1px);
+    }
+    .neu-btn:active {
+      box-shadow: var(--neu-shadow-pressed);
+      transform: translateY(0);
+    }
+    .neu-btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      pointer-events: none;
+    }
   </style>
 </head>
 <body>
@@ -115,6 +146,34 @@
     <div class="code-box">
       npm run build
     </div>
+    <button type="button" id="retryBtn" class="neu-btn">
+      Retry Loading
+    </button>
   </div>
+
+  <script>
+    const retryBtn = document.getElementById('retryBtn');
+    retryBtn.addEventListener('click', () => {
+      retryBtn.textContent = 'Rechecking...';
+      retryBtn.disabled = true;
+      if (window.settingsAPI && window.settingsAPI.retryInitialization) {
+        window.settingsAPI.retryInitialization();
+      } else {
+        setTimeout(() => {
+          window.location.reload();
+        }, 1000);
+      }
+    });
+
+    if (window.settingsAPI && window.settingsAPI.onRetryResponse) {
+      window.settingsAPI.onRetryResponse((status) => {
+        if (!status.success) {
+          retryBtn.textContent = 'Retry Loading';
+          retryBtn.disabled = false;
+          alert('Build directory still not found. Please run "npm run build" in the main root directory.');
+        }
+      });
+    }
+  </script>
 </body>
 </html>
