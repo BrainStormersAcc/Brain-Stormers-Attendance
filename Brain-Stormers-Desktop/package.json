@@ -1,6 +1,6 @@
 {
   "name": "brain-stormers-desktop",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Desktop wrapper for Brain Stormers Attendance PWA using Electron",
   "main": "main.js",
   "scripts": {
@@ -17,6 +17,7 @@
   "author": "Brain Stormers",
   "license": "ISC",
   "dependencies": {
+    "electron-updater": "^6.2.1",
     "firebase-admin": "^12.1.0",
     "koffi": "^2.9.1"
   },
@@ -27,6 +28,12 @@
   "build": {
     "appId": "com.brainstormers.desktop",
     "productName": "Brain Stormers Attendance",
+    "publish": {
+      "provider": "github",
+      "owner": "BrainStormersAcc",
+      "repo": "Brain-Stormers-Attendance",
+      "private": false
+    },
     "directories": {
       "output": "release"
     },

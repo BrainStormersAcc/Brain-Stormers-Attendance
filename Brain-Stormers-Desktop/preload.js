@@ -46,3 +46,12 @@ contextBridge.exposeInMainWorld('fingerprintAPI', {
   updateFingerprintCache: (uid, template) => ipcRenderer.send('fingerprint:update-cache', { uid, template }),
   removeFingerprintCache: (uid) => ipcRenderer.send('fingerprint:remove-cache', uid)
 });
+
+contextBridge.exposeInMainWorld('autoUpdateAPI', {
+  onUpdateDownloaded: (callback) => {
+    const listener = (event, info) => callback(info);
+    ipcRenderer.on('update:downloaded', listener);
+    return () => ipcRenderer.removeListener('update:downloaded', listener);
+  },
+  restartAndInstall: () => ipcRenderer.send('update:restart-now')
+});

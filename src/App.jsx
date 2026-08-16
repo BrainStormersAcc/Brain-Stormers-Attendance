@@ -17,11 +17,13 @@ import DeviceList from './modules/device-management/pages/DeviceList';
 // Route Protection and Modal
 import ProtectedRoute from './shared/components/ProtectedRoute.jsx';
 import AdminLoginModal from './shared/components/AdminLoginModal.jsx';
+import AutoUpdateToast from './shared/components/AutoUpdateToast.jsx';
 
 function App() {
   return (
     <Router>
       <AdminLoginModal />
+      <AutoUpdateToast />
       <Routes>
         {/* Auth Route */}
         <Route path="/login" element={<Login />} />

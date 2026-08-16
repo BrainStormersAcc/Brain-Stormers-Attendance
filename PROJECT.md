@@ -304,5 +304,23 @@ There must never be a button, link, hidden tap target, or text hint in the UI po
 1.  **Read First:** Always read this `PROJECT.md` and [FOLDER_RULES.md](file:///c:/Users/niaz/Desktop/Brain-Stormers/Projects/Brain-Stormers-Attendance/FOLDER_RULES.md) before building or editing code.
 2.  **Follow the Pattern:** Maintain strict modularity inside `src/modules/`.
 3.  **Role Integrity:** Do not change the Firestore schema to bypass role filtering.
-4.  **Document Changes:** Keep `PROJECT.md` updated as new features or integrations are successfully deployed.
-5.  **Environment Variables:** Do not hardcode Firebase configurations, API keys, or operational configurations. Always load them from environment variables via `.env`.
+4.  Document Changes: Keep `PROJECT.md` updated as new features or integrations are successfully deployed.
+5.  Environment Variables: Do not hardcode Firebase configurations, API keys, or operational configurations. Always load them from environment variables via `.env`.
+
+---
+
+## 11. Automated Release Pipeline (CI/CD)
+
+The desktop application wrapper supports fully automated Windows installer compilation and publishing using **GitHub Actions**.
+
+### A. Workflow Configuration
+The release pipeline is defined in [release.yml](file:///.github/workflows/release.yml) and runs on a `windows-latest` virtual runner. It executes the following steps:
+1.  Checks out the latest repository code.
+2.  Sets up Node.js (version 20).
+3.  Installs parent PWA project dependencies and compiles the Vite production bundle (`dist/`).
+4.  Installs desktop wrapper dependencies inside the `Brain-Stormers-Desktop/` directory.
+5.  Runs `electron-builder --publish always` to package the app and publish it directly to **GitHub Releases**.
+
+### B. Versioning & Tagging Rule
+*   **Manual Bump Requirement:** The CI pipeline relies on the `"version"` field inside the desktop wrapper's [`package.json`](file:///c:/Users/niaz/Desktop/Brain-Stormers/Projects/Brain-Stormers-Attendance/Brain-Stormers-Desktop/package.json#L3). **You must manually bump this version number** to match the target release (e.g., changing `0.1.0` to `0.1.1`) before triggering a release.
+*   **Trigger:** Pushing a git tag matching the pattern `v*` (e.g., `v0.1.1`) triggers the GitHub Actions workflow. The build will succeed, compile the Windows executable with version `0.1.1`, and upload it as a published release.

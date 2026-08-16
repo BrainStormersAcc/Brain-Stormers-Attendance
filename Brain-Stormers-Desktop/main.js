@@ -1,4 +1,5 @@
 const { app, BrowserWindow, Menu, ipcMain, dialog, Tray } = require('electron');
+const { autoUpdater } = require('electron-updater');
 
 // Force app name to ensure userData path resolves to 'brain-stormers-desktop' in both dev and production modes
 app.name = 'brain-stormers-desktop';
@@ -843,6 +844,61 @@ ipcMain.on('fingerprint:remove-cache', (event, uid) => {
   console.log(`[Main Process] Removed user from fingerprint cache: ${uid} (Total cache size: ${enrolledTemplatesCache.size})`);
 });
 
+// =========================================================================
+// ELECTRON AUTO-UPDATER LOGIC (electron-updater)
+// =========================================================================
+
+// Configure autoUpdater
+autoUpdater.autoDownload = false;
+
+// Event: Error check/download failure (logged silently)
+autoUpdater.on('error', (err) => {
+  console.error('[AutoUpdater] Update check or download failed:', err ? err.stack || err : err);
+});
+
+// Event: Update available -> Download in the background immediately
+autoUpdater.on('update-available', (info) => {
+  console.log(`[AutoUpdater] Version ${info.version} is available. Starting background download...`);
+  autoUpdater.downloadUpdate().catch(err => {
+    console.error('[AutoUpdater] Background download failed:', err);
+  });
+});
+
+// Event: Update downloaded -> Notify renderer process
+autoUpdater.on('update-downloaded', (info) => {
+  console.log(`[AutoUpdater] Version ${info.version} downloaded successfully and is ready to install.`);
+  if (mainWindow) {
+    mainWindow.webContents.send('update:downloaded', info);
+  }
+});
+
+// IPC Handler: Restart app and install update
+ipcMain.on('update:restart-now', () => {
+  console.log('[AutoUpdater] Restart and install requested by renderer.');
+  autoUpdater.quitAndInstall();
+});
+
+// Start loop checking for updates
+function initializeAutoUpdater() {
+  console.log('[AutoUpdater] Setting up auto-update checks...');
+  
+  // Initial check after window is loaded and ready
+  setTimeout(() => {
+    console.log('[AutoUpdater] Performing initial update check...');
+    autoUpdater.checkForUpdates().catch(err => {
+      console.error('[AutoUpdater] Initial check error:', err);
+    });
+  }, 5000); // 5 seconds delay to prioritize startup loading
+
+  // Periodically check every 30 minutes
+  setInterval(() => {
+    console.log('[AutoUpdater] Performing periodic update check...');
+    autoUpdater.checkForUpdates().catch(err => {
+      console.error('[AutoUpdater] Periodic check error:', err);
+    });
+  }, 30 * 60 * 1000);
+}
+
 app.on('before-quit', () => {
   app.isQuitting = true;
 });
@@ -850,6 +906,7 @@ app.on('before-quit', () => {
 app.whenReady().then(() => {
   createWindow();
   createTray();
+  initializeAutoUpdater();
 
   app.on('activate', function () {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

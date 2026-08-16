@@ -93,6 +93,22 @@ After installing, launch the app from the Start menu or a desktop shortcut. The 
 
 ---
 
+## 💻 Deploying to a New PC
+
+When deploying the desktop application wrapper to a new computer for fingerprint-based attendance tracking, you must configure the hardware drivers:
+
+1. **Install ZKFinger Driver:**
+   * Before using fingerprint features, you **must run the official ZKFinger driver installer (`setup.exe`)** separately on the machine.
+   * This installer configures the USB device drivers and registers the critical runtime library **`libzkfp.dll`** directly into **`C:\Windows\System32\`**.
+   * The app is designed to look up this file in `System32` dynamically at runtime. It is **not** bundled inside our application installer.
+   * **Note:** The app will still install and launch successfully on PCs without this driver, and all non-biometric dashboard features will work normally—however, biometric capture and listening loops will fail to initialize.
+
+2. **Register and Sync Device:**
+   * Make sure the device is registered in the Web Admin dashboard.
+   * Open Settings inside the desktop app using **`Ctrl + Shift + S`**, click **Fetch Devices**, select the corresponding PC scanner registration from the list, and click **Save** to download and cache the device key.
+
+---
+
 ## 🔌 Biometric Scanner Native Integration (Phase 5)
 
 To interface with the physical fingerprint scanner on Windows, this wrapper utilizes native integration:
