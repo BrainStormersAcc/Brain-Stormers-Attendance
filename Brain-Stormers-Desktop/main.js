@@ -4,6 +4,31 @@ const { autoUpdater } = require('electron-updater');
 // Force app name to ensure userData path resolves to 'brain-stormers-desktop' in both dev and production modes
 app.name = 'brain-stormers-desktop';
 
+// Production Diagnostic Logging
+const logCrash = (type, error) => {
+  try {
+    const fs = require('fs');
+    const path = require('path');
+    const userDataPath = app.getPath('userData');
+    if (!fs.existsSync(userDataPath)) {
+      fs.mkdirSync(userDataPath, { recursive: true });
+    }
+    const logPath = path.join(userDataPath, 'crash-log.txt');
+    const logMessage = `[${new Date().toISOString()}] ${type}:\n${error?.stack || error}\n\n`;
+    fs.appendFileSync(logPath, logMessage, 'utf8');
+  } catch (e) {
+    console.error('Failed to write crash log:', e);
+  }
+};
+
+process.on('uncaughtException', (err) => {
+  logCrash('Uncaught Exception', err);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  logCrash('Unhandled Rejection', reason);
+});
+
 const path = require('path');
 const fs = require('fs');
 const http = require('http');
@@ -301,6 +326,16 @@ function createWindow() {
   // Forward renderer process logs to the main process console
   mainWindow.webContents.on('console-message', (event, level, message, line, sourceId) => {
     console.log(`[Renderer Console] ${message}`);
+  });
+
+  // Log load failures (e.g., local server crash)
+  mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL) => {
+    logCrash('Renderer Failed to Load URL', new Error(`URL: ${validatedURL}\nError: ${errorDescription} (${errorCode})`));
+  });
+
+  // Log renderer process crashes (e.g., memory issues or WebGL errors)
+  mainWindow.webContents.on('render-process-gone', (event, details) => {
+    logCrash('Renderer Process Gone', new Error(`Reason: ${details.reason}, Exit Code: ${details.exitCode}`));
   });
 
   // Lock window title to prevent web overrides
