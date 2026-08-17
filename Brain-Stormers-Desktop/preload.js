@@ -44,7 +44,12 @@ contextBridge.exposeInMainWorld('fingerprintAPI', {
   matchTemplates: (temp1, temp2) => ipcRenderer.invoke('fingerprint:match-templates', temp1, temp2),
   mergeTemplates: (temp1, temp2, temp3) => ipcRenderer.invoke('fingerprint:merge-templates', temp1, temp2, temp3),
   updateFingerprintCache: (uid, template) => ipcRenderer.send('fingerprint:update-cache', { uid, template }),
-  removeFingerprintCache: (uid) => ipcRenderer.send('fingerprint:remove-cache', uid)
+  removeFingerprintCache: (uid) => ipcRenderer.send('fingerprint:remove-cache', uid),
+  onStatusChanged: (callback) => {
+    const listener = (event, status) => callback(status);
+    ipcRenderer.on('fingerprint:status-changed', listener);
+    return () => ipcRenderer.removeListener('fingerprint:status-changed', listener);
+  }
 });
 
 contextBridge.exposeInMainWorld('autoUpdateAPI', {

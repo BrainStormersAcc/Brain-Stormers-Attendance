@@ -336,3 +336,20 @@ To resolve issues where specific hardware/graphics driver configurations cause t
 3. **Infinite Reload Protection**: Automatic reloads are gated to prevent loop-locking. The app tracks reload timestamps and will only auto-reload if there are fewer than 3 attempts in the last 60 seconds.
 4. **User-Facing Alert**: If the renderer crashes repeatedly (3 or more times within 60 seconds), the app displays a native error dialog prompting the user: *"The app encountered a repeated rendering issue. Please restart the application."* instead of failing silently with a blank screen.
 
+---
+
+## 13. Native Biometric Scanner Disconnection / Presence Protection Fix (v1.0.5)
+
+To prevent hard native crashes (throwing exception code `0x80000003` inside `libzkfp.dll` via Koffi bindings) on machines that do not have a physical fingerprint scanner connected:
+
+1. **Pre-checks Connection Count**: The desktop application calls `ZKFPM_GetDeviceCount()` inside [`fingerprintSdk.js`](file:///c:/Users/niaz/Desktop/Brain-Stormers/Projects/Brain-Stormers-Attendance/Brain-Stormers-Desktop/src/main/fingerprintSdk.js#L93) before invoking any hardware initialization, device opening, or biometric capture functions.
+2. **Device Connection Guarding**: If the device count is 0, the app bypasses all native capture calls (like `ZKFPM_OpenDevice` and `ZKFPM_AcquireFingerprint`) completely. This prevents unmanaged driver-level faults when no reader is available.
+3. **Dynamic Standby and Autodetect**:
+   - The background biometrics listening loop polls the device count every 10 seconds.
+   - If a device is unplugged or plugged in, the app dynamically detects the hardware status change.
+   - On connection, it initializes and resumes fingerprint listening automatically.
+   - On disconnection, it halts scanner loops gracefully and goes into standby mode.
+4. **Informational UI States**: A status-change listener is established between the main thread and the web application. When no device is present, the "🔍 Fingerprint Tester" widget displays *"No fingerprint scanner detected"* as a clean gray informational state, rather than showing a red error block or crashing the application.
+5. **Koffi Error Protection**: All JavaScript wrapper calls mapping native functions are wrapped in explicit `try/catch` statements to catch manageable koffi or binding errors cleanly.
+
+

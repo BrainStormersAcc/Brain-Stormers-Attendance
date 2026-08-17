@@ -90,63 +90,84 @@ function loadDll() {
 }
 
 /**
+ * Query the number of connected fingerprint devices safely without throwing errors.
+ */
+function getConnectedDeviceCount() {
+  try {
+    loadDll();
+    const initRet = ZKFPM_Init();
+    if (initRet !== 0 && initRet !== 1) { // 0: OK, 1: Already Initialized
+      return 0;
+    }
+    const count = ZKFPM_GetDeviceCount();
+    return count;
+  } catch (err) {
+    console.error('[ZKFinger SDK] Failed to query device count:', err.message);
+    return 0;
+  }
+}
+
+/**
  * Initialize the fingerprint reader device.
  */
 async function initDevice() {
-  loadDll();
+  try {
+    loadDll();
 
-  if (hDevice) {
-    console.log('[ZKFinger SDK] Device already open.');
-    return { width: deviceWidth, height: deviceHeight, dpi: deviceDpi };
+    if (hDevice) {
+      console.log('[ZKFinger SDK] Device already open.');
+      return { success: true, width: deviceWidth, height: deviceHeight, dpi: deviceDpi };
+    }
+
+    // Initialize library
+    const initRet = ZKFPM_Init();
+    if (initRet !== 0 && initRet !== 1) { // 0: OK, 1: Already Initialized
+      return { success: false, error: `Failed to initialize ZKFinger library (code: ${initRet})` };
+    }
+
+    // Check device count
+    const devCount = ZKFPM_GetDeviceCount();
+    console.log(`[ZKFinger SDK] Detected connected devices: ${devCount}`);
+    if (devCount <= 0) {
+      return { success: false, noDevice: true, error: 'No fingerprint scanning devices detected.' };
+    }
+
+    // Open first device (index 0)
+    hDevice = ZKFPM_OpenDevice(0);
+    if (!hDevice || koffi.address(hDevice) === 0) {
+      hDevice = null;
+      return { success: false, error: 'Failed to open the fingerprint scanner device.' };
+    }
+
+    // Initialize DB cache
+    hDBCache = ZKFPM_DBInit();
+    if (!hDBCache || koffi.address(hDBCache) === 0) {
+      console.error('[ZKFinger SDK] Failed to initialize DB cache.');
+    } else {
+      console.log('[ZKFinger SDK] DB cache initialized successfully.');
+    }
+
+    // Query device parameters
+    let widthArr = [0];
+    let heightArr = [0];
+    let dpiArr = [0];
+    const paramRet = ZKFPM_GetCaptureParamsEx(hDevice, widthArr, heightArr, dpiArr);
+    
+    if (paramRet !== 0) {
+      await closeDevice();
+      return { success: false, error: `Failed to retrieve device parameters (code: ${paramRet})` };
+    }
+
+    deviceWidth = widthArr[0];
+    deviceHeight = heightArr[0];
+    deviceDpi = dpiArr[0];
+
+    console.log(`[ZKFinger SDK] Device opened successfully. Dimensions: ${deviceWidth}x${deviceHeight} @ ${deviceDpi} DPI`);
+    return { success: true, width: deviceWidth, height: deviceHeight, dpi: deviceDpi };
+  } catch (err) {
+    console.error('[ZKFinger SDK] initDevice failed:', err.message);
+    return { success: false, error: err.message };
   }
-
-  // Initialize library
-  const initRet = ZKFPM_Init();
-  if (initRet !== 0 && initRet !== 1) { // 0: OK, 1: Already Initialized
-    throw new Error(`Failed to initialize ZKFinger library (code: ${initRet})`);
-  }
-
-  // Check device count
-  const devCount = ZKFPM_GetDeviceCount();
-  console.log(`[ZKFinger SDK] Detected connected devices: ${devCount}`);
-  if (devCount <= 0) {
-    ZKFPM_Terminate();
-    throw new Error('No fingerprint scanning devices detected.');
-  }
-
-  // Open first device (index 0)
-  hDevice = ZKFPM_OpenDevice(0);
-  if (!hDevice || koffi.address(hDevice) === 0) {
-    hDevice = null;
-    ZKFPM_Terminate();
-    throw new Error('Failed to open the fingerprint scanner device.');
-  }
-
-  // Initialize DB cache
-  hDBCache = ZKFPM_DBInit();
-  if (!hDBCache || koffi.address(hDBCache) === 0) {
-    console.error('[ZKFinger SDK] Failed to initialize DB cache.');
-  } else {
-    console.log('[ZKFinger SDK] DB cache initialized successfully.');
-  }
-
-  // Query device parameters
-  let widthArr = [0];
-  let heightArr = [0];
-  let dpiArr = [0];
-  const paramRet = ZKFPM_GetCaptureParamsEx(hDevice, widthArr, heightArr, dpiArr);
-  
-  if (paramRet !== 0) {
-    closeDevice();
-    throw new Error(`Failed to retrieve device parameters (code: ${paramRet})`);
-  }
-
-  deviceWidth = widthArr[0];
-  deviceHeight = heightArr[0];
-  deviceDpi = dpiArr[0];
-
-  console.log(`[ZKFinger SDK] Device opened successfully. Dimensions: ${deviceWidth}x${deviceHeight} @ ${deviceDpi} DPI`);
-  return { width: deviceWidth, height: deviceHeight, dpi: deviceDpi };
 }
 
 /**
@@ -154,17 +175,17 @@ async function initDevice() {
  * Polling based capture loop running in an async block to prevent blocking the main thread.
  */
 async function captureFingerprint(timeoutMs = 20000) {
-  if (!hDevice) {
-    throw new Error('Fingerprint scanner device is not initialized. Call initDevice() first.');
-  }
-
-  if (isCapturing) {
-    throw new Error('A fingerprint capture operation is already in progress.');
-  }
-
-  isCapturing = true;
-
   try {
+    if (!hDevice) {
+      return { success: false, error: 'Fingerprint scanner device is not initialized. Call initDevice() first.' };
+    }
+
+    if (isCapturing) {
+      return { success: false, error: 'A fingerprint capture operation is already in progress.' };
+    }
+
+    isCapturing = true;
+
     const startTime = Date.now();
     const maxTemplateSize = 2048;
     
@@ -175,7 +196,17 @@ async function captureFingerprint(timeoutMs = 20000) {
 
     while (isCapturing) {
       if (Date.now() - startTime > timeoutMs) {
-        throw new Error('Fingerprint capture timeout. No finger detected.');
+        isCapturing = false;
+        return { success: false, error: 'Fingerprint capture timeout. No finger detected.' };
+      }
+
+      // Check device count before each acquire call to handle runtime unplugging safely
+      const count = ZKFPM_GetDeviceCount();
+      if (count <= 0) {
+        console.warn('[ZKFinger SDK] Device unplugged during capture.');
+        isCapturing = false;
+        await closeDevice();
+        return { success: false, noDevice: true, error: 'No fingerprint scanner detected.' };
       }
 
       // cbTemplate must be reset to maximum template size before each attempt
@@ -191,6 +222,7 @@ async function captureFingerprint(timeoutMs = 20000) {
         const templateSlice = templateBuf.slice(0, actualLength);
         isCapturing = false;
         return {
+          success: true,
           template: templateSlice.toString('base64'),
           length: actualLength
         };
@@ -198,9 +230,14 @@ async function captureFingerprint(timeoutMs = 20000) {
         // These are transient states (busy/no finger/bad placement). Wait 150ms and try again.
         await new Promise(resolve => setTimeout(resolve, 150));
       } else {
-        throw new Error(`Critical error during fingerprint capture (code: ${ret})`);
+        isCapturing = false;
+        return { success: false, error: `Critical error during fingerprint capture (code: ${ret})` };
       }
     }
+  } catch (err) {
+    console.error('[ZKFinger SDK] captureFingerprint failed:', err.message);
+    isCapturing = false;
+    return { success: false, error: err.message };
   } finally {
     isCapturing = false;
   }
@@ -210,28 +247,32 @@ async function captureFingerprint(timeoutMs = 20000) {
  * Close and release the fingerprint scanner.
  */
 async function closeDevice() {
-  if (isCapturing) {
-    isCapturing = false;
-    // Allow small delay for polling loop to exit
-    await new Promise(resolve => setTimeout(resolve, 200));
-  }
+  try {
+    if (isCapturing) {
+      isCapturing = false;
+      // Allow small delay for polling loop to exit
+      await new Promise(resolve => setTimeout(resolve, 200));
+    }
 
-  if (hDevice) {
-    ZKFPM_CloseDevice(hDevice);
-    hDevice = null;
-    console.log('[ZKFinger SDK] Fingerprint device connection closed.');
-  }
+    if (hDevice) {
+      ZKFPM_CloseDevice(hDevice);
+      hDevice = null;
+      console.log('[ZKFinger SDK] Fingerprint device connection closed.');
+    }
 
-  if (hDBCache) {
-    ZKFPM_DBFree(hDBCache);
-    hDBCache = null;
-    console.log('[ZKFinger SDK] DB cache freed.');
-  }
+    if (hDBCache) {
+      ZKFPM_DBFree(hDBCache);
+      hDBCache = null;
+      console.log('[ZKFinger SDK] DB cache freed.');
+    }
 
-  if (lib) {
-    ZKFPM_Terminate();
-    lib = null;
-    console.log('[ZKFinger SDK] Library terminated.');
+    if (lib) {
+      ZKFPM_Terminate();
+      lib = null;
+      console.log('[ZKFinger SDK] Library terminated.');
+    }
+  } catch (err) {
+    console.error('[ZKFinger SDK] closeDevice failed:', err.message);
   }
 
   return { success: true };
@@ -241,40 +282,50 @@ async function closeDevice() {
  * Merge three pre-registered templates into one registered template.
  */
 async function mergeTemplates(temp1Base64, temp2Base64, temp3Base64) {
-  if (!hDBCache) {
-    throw new Error('Database cache is not initialized.');
+  try {
+    if (!hDBCache) {
+      throw new Error('Database cache is not initialized.');
+    }
+
+    const temp1 = Buffer.from(temp1Base64, 'base64');
+    const temp2 = Buffer.from(temp2Base64, 'base64');
+    const temp3 = Buffer.from(temp3Base64, 'base64');
+    
+    const regTemp = Buffer.alloc(2048);
+    let cbRegTemp = [2048];
+
+    const ret = ZKFPM_DBMerge(hDBCache, temp1, temp2, temp3, regTemp, cbRegTemp);
+    if (ret !== 0) {
+      throw new Error(`Failed to merge templates (code: ${ret})`);
+    }
+
+    const actualLength = cbRegTemp[0];
+    const mergedSlice = regTemp.slice(0, actualLength);
+    return mergedSlice.toString('base64');
+  } catch (err) {
+    console.error('[ZKFinger SDK] mergeTemplates failed:', err.message);
+    throw err;
   }
-
-  const temp1 = Buffer.from(temp1Base64, 'base64');
-  const temp2 = Buffer.from(temp2Base64, 'base64');
-  const temp3 = Buffer.from(temp3Base64, 'base64');
-  
-  const regTemp = Buffer.alloc(2048);
-  let cbRegTemp = [2048];
-
-  const ret = ZKFPM_DBMerge(hDBCache, temp1, temp2, temp3, regTemp, cbRegTemp);
-  if (ret !== 0) {
-    throw new Error(`Failed to merge templates (code: ${ret})`);
-  }
-
-  const actualLength = cbRegTemp[0];
-  const mergedSlice = regTemp.slice(0, actualLength);
-  return mergedSlice.toString('base64');
 }
 
 /**
  * Match two fingerprint templates. Returns the match score (> 0 matches).
  */
 async function matchTemplates(temp1Base64, temp2Base64) {
-  if (!hDBCache) {
-    throw new Error('Database cache is not initialized.');
+  try {
+    if (!hDBCache) {
+      throw new Error('Database cache is not initialized.');
+    }
+
+    const temp1 = Buffer.from(temp1Base64, 'base64');
+    const temp2 = Buffer.from(temp2Base64, 'base64');
+
+    const score = ZKFPM_DBMatch(hDBCache, temp1, temp1.length, temp2, temp2.length);
+    return score;
+  } catch (err) {
+    console.error('[ZKFinger SDK] matchTemplates failed:', err.message);
+    throw err;
   }
-
-  const temp1 = Buffer.from(temp1Base64, 'base64');
-  const temp2 = Buffer.from(temp2Base64, 'base64');
-
-  const score = ZKFPM_DBMatch(hDBCache, temp1, temp1.length, temp2, temp2.length);
-  return score;
 }
 
 module.exports = {
@@ -282,5 +333,6 @@ module.exports = {
   captureFingerprint,
   closeDevice,
   mergeTemplates,
-  matchTemplates
+  matchTemplates,
+  getConnectedDeviceCount
 };

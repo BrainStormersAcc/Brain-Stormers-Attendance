@@ -86,6 +86,12 @@ export default function EnrollStaff() {
       // 1. Initialize scanner
       const initRes = await window.fingerprintAPI.initDevice();
       console.log('[Enroll UI] Device initialized:', initRes);
+      if (!initRes.success) {
+        if (initRes.noDevice) {
+          throw new Error('No fingerprint scanner detected. Please plug in a scanner first.');
+        }
+        throw new Error(initRes.error || 'Failed to initialize scanner.');
+      }
 
       // 2. Scan 1
       setStatusMsg('👉 Place finger on the scanner sensor (Scan 1 of 3)...');

@@ -655,10 +655,44 @@ async function runBackgroundListeningLoop() {
   isBackgroundListening = true;
   console.log('[Background Listener] Started background fingerprint listening loop...');
 
+  let lastStatusWasConnected = null;
+
   while (isBackgroundListening && !isSuspendedForEnrollment) {
     try {
+      // 1. Check device count first
+      const devCount = fingerprintSdk.getConnectedDeviceCount();
+      
+      if (devCount <= 0) {
+        // Device is not connected
+        if (lastStatusWasConnected !== false) {
+          lastStatusWasConnected = false;
+          console.log('[Background Listener] No scanner detected. Standing by...');
+          if (mainWindow) {
+            mainWindow.webContents.send('fingerprint:status-changed', { noDevice: true });
+          }
+        }
+        
+        // Wait 10-15 seconds before checking again (as requested)
+        await new Promise(resolve => setTimeout(resolve, 10000));
+        continue;
+      }
+
+      // Device IS connected!
+      if (lastStatusWasConnected !== true) {
+        lastStatusWasConnected = true;
+        console.log('[Background Listener] Scanner detected. Initializing...');
+        if (mainWindow) {
+          mainWindow.webContents.send('fingerprint:status-changed', { connected: true });
+        }
+      }
+
       // Ensure SDK is initialized
-      await fingerprintSdk.initDevice();
+      const initRes = await fingerprintSdk.initDevice();
+      if (!initRes.success) {
+        console.error('[Background Listener] Device init failed:', initRes.error);
+        await new Promise(resolve => setTimeout(resolve, 3000));
+        continue;
+      }
 
       // Poll scanner (10 second timeout)
       const result = await fingerprintSdk.captureFingerprint(10000);
@@ -667,19 +701,28 @@ async function runBackgroundListeningLoop() {
         break;
       }
 
-      if (result && result.template) {
+      if (result && result.success && result.template) {
         console.log('[Background Listener] Captured fingerprint. Matching template...');
         await processBiometricScan(result.template);
+      } else if (result && !result.success) {
+        if (result.noDevice) {
+          // Scanner was unplugged during capture
+          lastStatusWasConnected = false;
+          if (mainWindow) {
+            mainWindow.webContents.send('fingerprint:status-changed', { noDevice: true });
+          }
+          await new Promise(resolve => setTimeout(resolve, 10000));
+        } else if (result.error && result.error.includes('timeout')) {
+          // Expected timeout when no finger is scanned, sleep briefly and loop again
+          await new Promise(resolve => setTimeout(resolve, 200));
+        } else {
+          console.error('[Background Listener] Capture failed:', result.error);
+          await new Promise(resolve => setTimeout(resolve, 3000));
+        }
       }
     } catch (err) {
-      if (err.message && err.message.includes('timeout')) {
-        // Expected timeout when no finger is scanned, sleep briefly and loop again
-        await new Promise(resolve => setTimeout(resolve, 200));
-        continue;
-      }
-      
-      console.error('[Background Listener] Loop encountered error:', err.message);
-      await new Promise(resolve => setTimeout(resolve, 3000));
+      console.error('[Background Listener] Loop encountered unexpected error:', err.message);
+      await new Promise(resolve => setTimeout(resolve, 5000));
     }
   }
 

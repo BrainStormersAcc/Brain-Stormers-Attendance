@@ -128,6 +128,11 @@ function DashboardLayout() {
 
       const initRes = await window.fingerprintAPI.initDevice();
       if (!initRes.success) {
+        if (initRes.noDevice) {
+          setFpStatus('No fingerprint scanner detected');
+          setFpMessageColor('var(--text-secondary)');
+          return;
+        }
         throw new Error(initRes.error || 'Initialization failed');
       }
 
@@ -136,6 +141,11 @@ function DashboardLayout() {
 
       const capRes = await window.fingerprintAPI.captureFingerprint(20000);
       if (!capRes.success) {
+        if (capRes.noDevice) {
+          setFpStatus('No fingerprint scanner detected');
+          setFpMessageColor('var(--text-secondary)');
+          return;
+        }
         throw new Error(capRes.error || 'Capture failed');
       }
 
@@ -153,6 +163,24 @@ function DashboardLayout() {
   };
 
   const [scannedResult, setScannedResult] = useState(null);
+
+  // Listen to background fingerprint status changes (plug/unplug events)
+  useEffect(() => {
+    if (window.fingerprintAPI && window.fingerprintAPI.onStatusChanged) {
+      const unsubscribe = window.fingerprintAPI.onStatusChanged((status) => {
+        if (status.noDevice) {
+          setFpStatus('No fingerprint scanner detected');
+          setFpMessageColor('var(--text-secondary)');
+        } else if (status.connected) {
+          setFpStatus('Scanner detected & active');
+          setFpMessageColor('#10b981');
+        }
+      });
+      return () => {
+        if (typeof unsubscribe === 'function') unsubscribe();
+      };
+    }
+  }, []);
 
   useEffect(() => {
     if (window.settingsAPI && window.settingsAPI.onAttendanceScanned) {
