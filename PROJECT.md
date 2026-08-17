@@ -324,3 +324,15 @@ The release pipeline is defined in [release.yml](file:///.github/workflows/relea
 ### B. Versioning & Tagging Rule
 *   **Manual Bump Requirement:** The CI pipeline relies on the `"version"` field inside the desktop wrapper's [`package.json`](file:///c:/Users/niaz/Desktop/Brain-Stormers/Projects/Brain-Stormers-Attendance/Brain-Stormers-Desktop/package.json#L3). **You must manually bump this version number** to match the target release (e.g., changing `0.1.0` to `0.1.1`) before triggering a release.
 *   **Trigger:** Pushing a git tag matching the pattern `v*` (e.g., `v0.1.1`) triggers the GitHub Actions workflow. The build will succeed, compile the Windows executable with version `0.1.1`, and upload it as a published release.
+
+---
+
+## 12. GPU and Hardware Acceleration Compatibility Fix (v1.0.4)
+
+To resolve issues where specific hardware/graphics driver configurations cause the app to crash with a white screen (throwing a `Renderer Process Gone` error due to GPU incompatibilities), the following measures have been implemented:
+
+1. **Disabled Hardware Acceleration**: `app.disableHardwareAcceleration()` is invoked as the absolute first executable statement in [`main.js`](file:///c:/Users/niaz/Desktop/Brain-Stormers/Projects/Brain-Stormers-Attendance/Brain-Stormers-Desktop/main.js#L2) (before requiring libraries like `electron-updater` or executing any other Electron API calls).
+2. **Automatic Crash Recovery**: The `render-process-gone` event handler has been upgraded to automatically restart/reload the collapsed window via `mainWindow.reload()`.
+3. **Infinite Reload Protection**: Automatic reloads are gated to prevent loop-locking. The app tracks reload timestamps and will only auto-reload if there are fewer than 3 attempts in the last 60 seconds.
+4. **User-Facing Alert**: If the renderer crashes repeatedly (3 or more times within 60 seconds), the app displays a native error dialog prompting the user: *"The app encountered a repeated rendering issue. Please restart the application."* instead of failing silently with a blank screen.
+

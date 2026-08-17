@@ -1,4 +1,5 @@
 const { app, BrowserWindow, Menu, ipcMain, dialog, Tray } = require('electron');
+app.disableHardwareAcceleration();
 const { autoUpdater } = require('electron-updater');
 
 // Force app name to ensure userData path resolves to 'brain-stormers-desktop' in both dev and production modes
@@ -39,6 +40,7 @@ let mainWindow;
 let settingsWindow;
 let staticServer;
 let tray = null;
+let rendererReloadAttempts = [];
 
 const SETTINGS_FILE = path.join(app.getPath('userData'), 'device-settings.json');
 
@@ -335,7 +337,28 @@ function createWindow() {
 
   // Log renderer process crashes (e.g., memory issues or WebGL errors)
   mainWindow.webContents.on('render-process-gone', (event, details) => {
-    logCrash('Renderer Process Gone', new Error(`Reason: ${details.reason}, Exit Code: ${details.exitCode}`));
+    const errorMsg = `Reason: ${details.reason}, Exit Code: ${details.exitCode}`;
+    logCrash('Renderer Process Gone', new Error(errorMsg));
+
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      const now = Date.now();
+      // Keep only reload attempts that occurred in the last 60 seconds
+      rendererReloadAttempts = rendererReloadAttempts.filter(time => now - time < 60000);
+
+      if (rendererReloadAttempts.length < 3) {
+        rendererReloadAttempts.push(now);
+        console.warn(`[Main Process] Renderer crashed (${errorMsg}). Auto-reloading mainWindow... Attempt ${rendererReloadAttempts.length} in the last 60s.`);
+        mainWindow.reload();
+      } else {
+        console.error(`[Main Process] Renderer crashed repeatedly (${rendererReloadAttempts.length} times in last 60s). Showing error dialog.`);
+        dialog.showMessageBox(mainWindow, {
+          type: 'error',
+          title: 'Rendering Issue',
+          message: 'The app encountered a repeated rendering issue. Please restart the application.',
+          buttons: ['OK']
+        });
+      }
+    }
   });
 
   // Lock window title to prevent web overrides
