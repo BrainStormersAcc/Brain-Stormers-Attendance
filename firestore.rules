@@ -86,7 +86,7 @@ service cloud.firestore {
 
     // Rules for auditLogs collection
     match /auditLogs/{logId} {
-      allow read: if isAdmin();
+      allow read: if isSignedIn();
       allow create: if isAdmin() || (
         isSignedIn() &&
         request.resource.data.action in ['create', 'self-edit'] &&

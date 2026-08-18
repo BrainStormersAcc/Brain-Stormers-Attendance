@@ -158,8 +158,20 @@ export default function DashboardHome(props) {
   // Attendance Records State
   const [attendanceLogs, setAttendanceLogs] = useState([]);
   const [filteredLogs, setFilteredLogs] = useState([]);
-  const [dateStart, setDateStart] = useState('');
-  const [dateEnd, setDateEnd] = useState('');
+  const getFirstDayOfCurrentMonth = () => {
+    const today = new Date();
+    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`;
+  };
+  
+  const getTodayString = () => {
+    const today = new Date();
+    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  };
+
+  const [dateMode, setDateMode] = useState('specific'); // 'specific' | 'range'
+  const [filterDate, setFilterDate] = useState(getTodayString());
+  const [dateStart, setDateStart] = useState(getFirstDayOfCurrentMonth());
+  const [dateEnd, setDateEnd] = useState(getTodayString());
   const [filterStaff, setFilterStaff] = useState('');
   const [recordsTarget, setRecordsTarget] = useState('Staff');
   const [expandedRows, setExpandedRows] = useState({});
@@ -225,16 +237,21 @@ export default function DashboardHome(props) {
       result = result.filter(log => log.userId === filterStaff);
     }
 
-    if (dateStart) {
-      result = result.filter(log => log.date >= dateStart);
-    }
-
-    if (dateEnd) {
-      result = result.filter(log => log.date <= dateEnd);
+    if (dateMode === 'specific') {
+      if (filterDate) {
+        result = result.filter(log => log.date === filterDate);
+      }
+    } else {
+      if (dateStart) {
+        result = result.filter(log => log.date >= dateStart);
+      }
+      if (dateEnd) {
+        result = result.filter(log => log.date <= dateEnd);
+      }
     }
 
     setFilteredLogs(result);
-  }, [filterStaff, dateStart, dateEnd, attendanceLogs]);
+  }, [filterStaff, dateMode, filterDate, dateStart, dateEnd, attendanceLogs]);
 
   // Handle Staff Account Registration
   const handleRegisterStaff = async (e) => {
@@ -1154,27 +1171,48 @@ export default function DashboardHome(props) {
                       </div>
                     )}
 
-                    {/* Start Date */}
-                    <NeuDatePicker
-                      label="Start Date"
-                      value={dateStart}
-                      onChange={setDateStart}
-                    />
+                    {/* Date Mode Selector */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      <label className="neu-input-label">Date Filter Mode</label>
+                      <div style={{ height: '48px', display: 'flex', alignItems: 'center' }}>
+                        <NeuSegmentedControl
+                          options={['Specific Date', 'Date Range']}
+                          selectedValue={dateMode === 'specific' ? 'Specific Date' : 'Date Range'}
+                          onChange={(val) => setDateMode(val === 'Specific Date' ? 'specific' : 'range')}
+                        />
+                      </div>
+                    </div>
 
-                    {/* End Date */}
-                    <NeuDatePicker
-                      label="End Date"
-                      value={dateEnd}
-                      onChange={setDateEnd}
-                    />
+                    {dateMode === 'specific' ? (
+                      <NeuDatePicker
+                        label="Specific Date"
+                        value={filterDate}
+                        onChange={setFilterDate}
+                      />
+                    ) : (
+                      <>
+                        <NeuDatePicker
+                          label="Start Date"
+                          value={dateStart}
+                          onChange={setDateStart}
+                        />
+                        <NeuDatePicker
+                          label="End Date"
+                          value={dateEnd}
+                          onChange={setDateEnd}
+                        />
+                      </>
+                    )}
 
                     {/* Reset Filters */}
                     <div style={{ display: 'flex', alignItems: 'flex-end' }}>
                       <NeuButton 
                         onClick={() => {
                           setFilterStaff('');
-                          setDateStart('');
-                          setDateEnd('');
+                          setDateMode('specific');
+                          setFilterDate(getTodayString());
+                          setDateStart(getFirstDayOfCurrentMonth());
+                          setDateEnd(getTodayString());
                         }}
                         style={{ width: '100%' }}
                       >

@@ -35,8 +35,21 @@ export default function AuditLog() {
   // Filter States
   const [filterStaff, setFilterStaff] = useState('');
   const [filterAction, setFilterAction] = useState('');
-  const [dateStart, setDateStart] = useState('');
-  const [dateEnd, setDateEnd] = useState('');
+  
+  const getFirstDayOfCurrentMonth = () => {
+    const today = new Date();
+    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`;
+  };
+
+  const getTodayString = () => {
+    const today = new Date();
+    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  };
+
+  const [dateMode, setDateMode] = useState('specific'); // 'specific' | 'range'
+  const [filterDate, setFilterDate] = useState(getTodayString());
+  const [dateStart, setDateStart] = useState(getFirstDayOfCurrentMonth());
+  const [dateEnd, setDateEnd] = useState(getTodayString());
 
   // Searchable Staff Dropdown States
   const [staffSearchQuery, setStaffSearchQuery] = useState('');
@@ -117,26 +130,36 @@ export default function AuditLog() {
       result = result.filter(log => log.action === filterAction);
     }
 
-    // Filter by date range (local day boundaries)
-    if (dateStart) {
-      const start = new Date(dateStart + 'T00:00:00');
-      result = result.filter(log => {
-        const logDate = log.timestamp?.seconds ? new Date(log.timestamp.seconds * 1000) : null;
-        return logDate && logDate >= start;
-      });
-    }
-
-    if (dateEnd) {
-      const end = new Date(dateEnd + 'T23:59:59');
-      result = result.filter(log => {
-        const logDate = log.timestamp?.seconds ? new Date(log.timestamp.seconds * 1000) : null;
-        return logDate && logDate <= end;
-      });
+    // Filter by date mode
+    if (dateMode === 'specific') {
+      if (filterDate) {
+        const start = new Date(filterDate + 'T00:00:00');
+        const end = new Date(filterDate + 'T23:59:59');
+        result = result.filter(log => {
+          const logDate = log.timestamp?.seconds ? new Date(log.timestamp.seconds * 1000) : null;
+          return logDate && logDate >= start && logDate <= end;
+        });
+      }
+    } else {
+      if (dateStart) {
+        const start = new Date(dateStart + 'T00:00:00');
+        result = result.filter(log => {
+          const logDate = log.timestamp?.seconds ? new Date(log.timestamp.seconds * 1000) : null;
+          return logDate && logDate >= start;
+        });
+      }
+      if (dateEnd) {
+        const end = new Date(dateEnd + 'T23:59:59');
+        result = result.filter(log => {
+          const logDate = log.timestamp?.seconds ? new Date(log.timestamp.seconds * 1000) : null;
+          return logDate && logDate <= end;
+        });
+      }
     }
 
     setFilteredLogs(result);
     setCurrentPage(1); // Reset to page 1 on filter modification
-  }, [filterStaff, filterAction, dateStart, dateEnd, auditLogs]);
+  }, [filterStaff, filterAction, dateMode, filterDate, dateStart, dateEnd, auditLogs]);
 
   // Helper date/time formatters
   const formatTimestamp = (timestamp) => {
@@ -611,19 +634,38 @@ export default function AuditLog() {
                 </div>
               </div>
 
-              {/* Start Date */}
-              <NeuDatePicker
-                label="Start Date"
-                value={dateStart}
-                onChange={setDateStart}
-              />
+              {/* Date Mode Selector */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <label className="neu-input-label">Date Filter Mode</label>
+                <div style={{ height: '48px', display: 'flex', alignItems: 'center' }}>
+                  <NeuSegmentedControl
+                    options={['Specific Date', 'Date Range']}
+                    selectedValue={dateMode === 'specific' ? 'Specific Date' : 'Date Range'}
+                    onChange={(val) => setDateMode(val === 'Specific Date' ? 'specific' : 'range')}
+                  />
+                </div>
+              </div>
 
-              {/* End Date */}
-              <NeuDatePicker
-                label="End Date"
-                value={dateEnd}
-                onChange={setDateEnd}
-              />
+              {dateMode === 'specific' ? (
+                <NeuDatePicker
+                  label="Specific Date"
+                  value={filterDate}
+                  onChange={setFilterDate}
+                />
+              ) : (
+                <>
+                  <NeuDatePicker
+                    label="Start Date"
+                    value={dateStart}
+                    onChange={setDateStart}
+                  />
+                  <NeuDatePicker
+                    label="End Date"
+                    value={dateEnd}
+                    onChange={setDateEnd}
+                  />
+                </>
+              )}
 
               {/* Reset Filters */}
               <div style={{ display: 'flex', alignItems: 'flex-end' }}>
@@ -632,8 +674,10 @@ export default function AuditLog() {
                     setFilterStaff('');
                     setStaffSearchQuery('');
                     setFilterAction('');
-                    setDateStart('');
-                    setDateEnd('');
+                    setDateMode('specific');
+                    setFilterDate(getTodayString());
+                    setDateStart(getFirstDayOfCurrentMonth());
+                    setDateEnd(getTodayString());
                   }}
                   style={{ width: '100%', height: '48px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}
                 >

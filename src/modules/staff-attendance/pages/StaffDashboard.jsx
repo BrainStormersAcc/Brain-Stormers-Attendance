@@ -155,7 +155,14 @@ export default function StaffDashboard() {
     return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
   };
 
+  const getTodayString = () => {
+    const today = new Date();
+    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  };
+
   // Filter States
+  const [dateMode, setDateMode] = useState('specific'); // 'specific' | 'range'
+  const [filterDate, setFilterDate] = useState(getTodayString());
   const [filterFrom, setFilterFrom] = useState(getFirstDayOfCurrentMonth());
   const [filterTo, setFilterTo] = useState(getLastDayOfCurrentMonth());
   const [searchQuery, setSearchQuery] = useState('');
@@ -783,12 +790,18 @@ export default function StaffDashboard() {
   const getFilteredLogs = () => {
     let result = [...rawLogs];
 
-    // 1. Date Range Filter
-    if (filterFrom) {
-      result = result.filter(log => log.date >= filterFrom);
-    }
-    if (filterTo) {
-      result = result.filter(log => log.date <= filterTo);
+    // 1. Date Mode Filter
+    if (dateMode === 'specific') {
+      if (filterDate) {
+        result = result.filter(log => log.date === filterDate);
+      }
+    } else {
+      if (filterFrom) {
+        result = result.filter(log => log.date >= filterFrom);
+      }
+      if (filterTo) {
+        result = result.filter(log => log.date <= filterTo);
+      }
     }
 
     // 2. Selected Staff Member Filter
@@ -812,8 +825,13 @@ export default function StaffDashboard() {
     const todayStr = getLocalTodayString();
     
     // Determine if user has changed filters from default values
-    const isDefaultRange = filterFrom === getFirstDayOfCurrentMonth() && filterTo === getLastDayOfCurrentMonth();
-    const workingDaysCount = getWorkingDaysInRange(filterFrom, filterTo);
+    const start = dateMode === 'specific' ? filterDate : filterFrom;
+    const end = dateMode === 'specific' ? filterDate : filterTo;
+
+    const isDefaultRange = dateMode === 'specific'
+      ? filterDate === getTodayString()
+      : filterFrom === getFirstDayOfCurrentMonth() && filterTo === getLastDayOfCurrentMonth();
+    const workingDaysCount = getWorkingDaysInRange(start, end);
 
     const activeStaffInContext = selectedStaff 
       ? rawStaffList.filter(s => s.uid === selectedStaff.uid)
@@ -824,8 +842,8 @@ export default function StaffDashboard() {
     // Average Attendance over selected date range for staff in scope
     const activeStaffUids = new Set(activeStaffInContext.map(s => s.uid));
     const logsInRange = rawLogs.filter(log => 
-      log.date >= filterFrom && 
-      log.date <= filterTo && 
+      log.date >= start && 
+      log.date <= end && 
       activeStaffUids.has(log.userId)
     );
     const presentLogsInRange = logsInRange.filter(log => {
@@ -852,6 +870,8 @@ export default function StaffDashboard() {
 
   // Reset Filters logic
   const handleResetFilters = () => {
+    setDateMode('specific');
+    setFilterDate(getTodayString());
     setFilterFrom(getFirstDayOfCurrentMonth());
     setFilterTo(getLastDayOfCurrentMonth());
     setSearchQuery('');
@@ -1226,19 +1246,41 @@ export default function StaffDashboard() {
       <NeuCard variant="raised" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px', alignItems: 'end' }}>
           
-          {/* From Date Picker */}
-          <NeuDatePicker
-            label="From Date"
-            value={filterFrom}
-            onChange={(val) => setFilterFrom(val)}
-          />
+          {/* Date Mode Selector */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <label className="neu-input-label">Date Filter Mode</label>
+            <div style={{ height: '48px', display: 'flex', alignItems: 'center' }}>
+              <NeuSegmentedControl
+                options={['Specific Date', 'Date Range']}
+                selectedValue={dateMode === 'specific' ? 'Specific Date' : 'Date Range'}
+                onChange={(val) => setDateMode(val === 'Specific Date' ? 'specific' : 'range')}
+              />
+            </div>
+          </div>
 
-          {/* To Date Picker */}
-          <NeuDatePicker
-            label="To Date"
-            value={filterTo}
-            onChange={(val) => setFilterTo(val)}
-          />
+          {dateMode === 'specific' ? (
+            <NeuDatePicker
+              label="Specific Date"
+              value={filterDate}
+              onChange={(val) => setFilterDate(val)}
+            />
+          ) : (
+            <>
+              {/* From Date Picker */}
+              <NeuDatePicker
+                label="From Date"
+                value={filterFrom}
+                onChange={(val) => setFilterFrom(val)}
+              />
+
+              {/* To Date Picker */}
+              <NeuDatePicker
+                label="To Date"
+                value={filterTo}
+                onChange={(val) => setFilterTo(val)}
+              />
+            </>
+          )}
 
           {/* Filter by Staff member */}
           {(isAdmin || isStaff) && (
