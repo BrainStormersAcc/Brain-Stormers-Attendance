@@ -69,6 +69,7 @@ function DashboardLayout() {
   const [modalOpen, setModalOpen] = useState(false);
   const [submittingCheckin, setSubmittingCheckin] = useState(false);
   const [checkinSuccess, setCheckinSuccess] = useState(false);
+  const [scanVerifying, setScanVerifying] = useState(false);
 
   // Fingerprint Diagnostics Dropdown states
   const [fpDropdownOpen, setFpDropdownOpen] = useState(false);
@@ -304,6 +305,7 @@ function DashboardLayout() {
       // Listen for matched fingerprint scan event from main process
       window.settingsAPI.onFingerprintScanned(async (staffData) => {
         console.log("[PWA Bridge] Received fingerprint scan match:", staffData);
+        setScanVerifying(true);
         try {
           const { collection, getDocs, query, where } = await import('firebase/firestore');
           const { db } = await import('../../config/firebase.js');
@@ -336,6 +338,8 @@ function DashboardLayout() {
           setScannedUser(staffData);
           setExistingAttendance(null);
           setModalOpen(true);
+        } finally {
+          setScanVerifying(false);
         }
       });
     }
@@ -625,7 +629,7 @@ function DashboardLayout() {
       icon: Layers,
       subItems: [
         (isStaff || isAdmin) && { name: 'Attendance Records', path: '/attendance-records', icon: Clock },
-        isAdmin && { name: 'Audit Log', path: '/audit-log', icon: ClipboardList },
+        (isStaff || isAdmin) && { name: 'Audit Log', path: '/audit-log', icon: ClipboardList },
         isAdmin && { name: 'Misuse Monitoring', path: '/misuse-monitoring', icon: ShieldAlert },
       ].filter(Boolean)
     },
@@ -2082,6 +2086,92 @@ function DashboardLayout() {
                 🕒 Time: {scannedResult.time}
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {scanVerifying && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(15, 23, 42, 0.75)',
+          backdropFilter: 'blur(10px)',
+          WebkitBackdropFilter: 'blur(10px)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 10000,
+          animation: 'fadeIn 0.2s ease-out'
+        }}>
+          <style>{`
+            @keyframes scan-line {
+              0% { top: 0%; opacity: 0; }
+              10% { opacity: 1; }
+              90% { opacity: 1; }
+              100% { top: 100%; opacity: 0; }
+            }
+            .scanner-line {
+              animation: scan-line 1.8s infinite linear;
+            }
+          `}</style>
+          <div style={{
+            padding: '40px 48px',
+            borderRadius: 'var(--border-radius-lg)',
+            backgroundColor: 'var(--bg-surface-elevated)',
+            border: '1px solid var(--border-color)',
+            boxShadow: 'var(--neu-shadow-raised)',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: '24px',
+            textAlign: 'center',
+            maxWidth: '350px',
+            width: '90%',
+            animation: 'scaleUp 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)'
+          }}>
+            <div style={{
+              width: '90px',
+              height: '90px',
+              borderRadius: '50%',
+              backgroundColor: 'var(--bg-base)',
+              boxShadow: 'var(--neu-shadow-pressed)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              position: 'relative',
+              overflow: 'hidden'
+            }}>
+              <div 
+                className="scanner-line"
+                style={{
+                  position: 'absolute',
+                  left: 0,
+                  width: '100%',
+                  height: '3px',
+                  backgroundColor: 'var(--color-primary)',
+                  boxShadow: '0 0 10px var(--color-primary-glow)',
+                  zIndex: 2,
+                }} 
+              />
+              <Fingerprint size={48} style={{ color: 'var(--color-primary)', opacity: 0.85 }} />
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <h3 style={{ fontSize: '1.25rem', margin: 0, fontWeight: 700, color: 'var(--text-primary)', fontFamily: 'var(--font-display)' }}>
+                Syncing Scan Data
+              </h3>
+              <p style={{
+                fontSize: '0.9rem',
+                margin: 0,
+                color: 'var(--text-secondary)',
+                lineHeight: '1.5'
+              }}>
+                Verifying biometrics database records. Please hold...
+              </p>
+            </div>
           </div>
         </div>
       )}

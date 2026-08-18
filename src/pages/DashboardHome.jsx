@@ -17,6 +17,7 @@ import {
   Eye,
   EyeOff,
   ChevronDown,
+  ChevronUp,
   Settings,
   TrendingUp
 } from 'lucide-react';
@@ -33,13 +34,12 @@ import {
   toggleStaffStatus, 
   editStaffCredentials,
   deleteStaffAccount,
-  getAllAttendance,
   purgeAllAttendanceData
 } from '../services/adminService.js';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import Skeleton from '../shared/components/Skeleton.jsx';
 import { db } from '../config/firebase.js';
-import { collection, query, where, getDocs } from 'firebase/firestore';
+import { collection, query, where, getDocs, onSnapshot } from 'firebase/firestore';
 import EnrollStaff from './EnrollStaff.jsx';
 import { getLocalTodayString, getTeamStats, getPersonalStats } from '../services/attendanceStats.js';
 
@@ -162,6 +162,13 @@ export default function DashboardHome(props) {
   const [dateEnd, setDateEnd] = useState('');
   const [filterStaff, setFilterStaff] = useState('');
   const [recordsTarget, setRecordsTarget] = useState('Staff');
+  const [expandedRows, setExpandedRows] = useState({});
+  const toggleRow = (id) => {
+    setExpandedRows(prev => ({
+      ...prev,
+      [id]: !prev[id]
+    }));
+  };
 
   // Fetch initial data
   const fetchData = async () => {
@@ -172,20 +179,42 @@ export default function DashboardHome(props) {
       // Both admin and staff now view team-wide directories and attendance logs
       const staff = await getAllStaff();
       setStaffList(staff);
-      
-      const logs = await getAllAttendance();
-      setAttendanceLogs(logs);
-      setFilteredLogs(logs);
     } catch (err) {
       console.error('Error fetching dashboard data:', err);
       setError('Failed to fetch registry data from server.');
-    } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
     fetchData();
+  }, [userProfile, currentUser]);
+
+  // Set up real-time listener for attendance logs
+  useEffect(() => {
+    if (!userProfile || !currentUser) return;
+
+    setError('');
+    const attendanceRef = collection(db, 'attendance');
+    const unsubscribe = onSnapshot(attendanceRef, (snapshot) => {
+      const logs = [];
+      snapshot.forEach((doc) => {
+        const data = doc.data();
+        if (data.isDeleted !== true) {
+          logs.push({ id: doc.id, ...data });
+        }
+      });
+      setAttendanceLogs(logs);
+      setLoading(false);
+    }, (err) => {
+      console.error('Error in real-time attendance listener:', err);
+      setError('Failed to sync attendance records.');
+      setLoading(false);
+    });
+
+    return () => {
+      unsubscribe();
+    };
   }, [userProfile, currentUser]);
 
   // Filter Attendance Logs
@@ -942,6 +971,18 @@ export default function DashboardHome(props) {
                 0%, 100% { transform: translateY(0); }
                 50% { transform: translateY(-8px); }
               }
+              @keyframes slide-down {
+                0% {
+                  opacity: 0;
+                  transform: translateY(-10px);
+                  max-height: 0;
+                }
+                100% {
+                  opacity: 1;
+                  transform: translateY(0);
+                  max-height: 500px;
+                }
+              }
               .cog-clockwise {
                 animation: spin-clockwise 8s linear infinite;
               }
@@ -950,6 +991,10 @@ export default function DashboardHome(props) {
               }
               .float-card {
                 animation: float 4s ease-in-out infinite;
+              }
+              .row-expand-anim {
+                animation: slide-down 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+                overflow: hidden;
               }
             `}</style>
 
@@ -1161,6 +1206,7 @@ export default function DashboardHome(props) {
                           <th style={{ padding: '12px 16px' }}>Check-Out</th>
                           <th style={{ padding: '12px 16px' }}>Status</th>
                           <th style={{ padding: '12px 16px' }}>Source</th>
+                          <th style={{ padding: '12px 16px', width: '50px' }}></th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1174,19 +1220,141 @@ export default function DashboardHome(props) {
                           else if (statusLower === 'late') statusColor = 'var(--color-warning)';
                           else if (statusLower === 'absent') statusColor = 'var(--color-danger)';
 
+                          // Resolve checkIn and checkOut with backward compatibility
+                          let displayCheckIn = null;
+                          let displayCheckOut = null;
+
+                          if (log.sessions && log.sessions.length > 0) {
+                            displayCheckIn = log.sessions[0].checkIn;
+                            displayCheckOut = log.sessions[log.sessions.length - 1].checkOut;
+                          } else {
+                            displayCheckIn = log.checkIn;
+                            displayCheckOut = log.checkOut;
+                          }
+
+                          const canExpand = log.sessions && log.sessions.length > 1;
+
                           return (
-                            <tr key={log.id} style={{ borderBottom: '1px solid var(--border-color)', fontSize: '0.95rem' }}>
-                              <td style={{ padding: '16px', fontWeight: 500 }}>{name}</td>
-                              <td style={{ padding: '16px' }}>{log.date}</td>
-                              <td style={{ padding: '16px' }}>{formatTime(log.checkIn)}</td>
-                              <td style={{ padding: '16px' }}>{log.checkOut ? formatTime(log.checkOut) : '--'}</td>
-                              <td style={{ padding: '16px', fontWeight: 600, color: statusColor, textTransform: 'capitalize' }}>
-                                {log.status}
-                              </td>
-                              <td style={{ padding: '16px', color: 'var(--text-muted)', textTransform: 'capitalize' }}>
-                                {log.markedBy || 'manual'}
-                              </td>
-                            </tr>
+                            <React.Fragment key={log.id}>
+                              <tr style={{ borderBottom: '1px solid var(--border-color)', fontSize: '0.95rem' }}>
+                                <td style={{ padding: '16px', fontWeight: 500 }}>{name}</td>
+                                <td style={{ padding: '16px' }}>{log.date}</td>
+                                <td style={{ padding: '16px' }}>{formatTime(displayCheckIn)}</td>
+                                <td style={{ padding: '16px' }}>
+                                  {displayCheckOut ? (
+                                    formatTime(displayCheckOut)
+                                  ) : (
+                                    <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                      <span>--</span>
+                                      <span
+                                        style={{
+                                          display: 'inline-flex',
+                                          alignItems: 'center',
+                                          padding: '4px 10px',
+                                          borderRadius: 'var(--border-radius-full)',
+                                          fontSize: '0.75rem',
+                                          fontWeight: 600,
+                                          backgroundColor: 'var(--bg-surface-elevated)',
+                                          border: '1px solid rgba(52, 211, 153, 0.25)',
+                                          boxShadow: 'var(--neu-shadow-pressed-sm)',
+                                          color: 'var(--color-success)',
+                                          textShadow: '0 0 6px var(--color-success-glow)',
+                                        }}
+                                      >
+                                        Session {log.sessions ? log.sessions.length : 1} ongoing
+                                      </span>
+                                    </span>
+                                  )}
+                                </td>
+                                <td style={{ padding: '16px', fontWeight: 600, color: statusColor, textTransform: 'capitalize' }}>
+                                  {log.status}
+                                </td>
+                                <td style={{ padding: '16px', color: 'var(--text-muted)', textTransform: 'capitalize' }}>
+                                  {log.markedBy || 'manual'}
+                                </td>
+                                <td style={{ padding: '16px', textAlign: 'center' }}>
+                                  {canExpand ? (
+                                    <button
+                                      onClick={() => toggleRow(log.id)}
+                                      style={{
+                                        background: 'none',
+                                        border: 'none',
+                                        cursor: 'pointer',
+                                        color: 'var(--text-secondary)',
+                                        padding: '4px',
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        borderRadius: 'var(--border-radius-full)',
+                                        boxShadow: 'var(--neu-shadow-raised-sm)',
+                                        backgroundColor: 'var(--bg-surface)',
+                                        transition: 'color var(--transition-normal), box-shadow var(--transition-normal)'
+                                      }}
+                                      title="Toggle Session Details"
+                                    >
+                                      <span style={{
+                                        display: 'inline-flex',
+                                        transform: expandedRows[log.id] ? 'rotate(180deg)' : 'rotate(0deg)',
+                                        transition: 'transform 0.25s ease'
+                                      }}>
+                                        <ChevronDown size={16} />
+                                      </span>
+                                    </button>
+                                  ) : null}
+                                </td>
+                              </tr>
+                              {expandedRows[log.id] && canExpand && (
+                                <tr style={{ backgroundColor: 'var(--bg-base)', borderBottom: '1px solid var(--border-color)' }}>
+                                  <td colSpan={7} style={{ padding: '16px 32px' }}>
+                                    <div 
+                                      className="row-expand-anim"
+                                      style={{
+                                        display: 'flex',
+                                        flexDirection: 'column',
+                                        gap: '12px',
+                                        padding: '16px 24px',
+                                        borderRadius: 'var(--border-radius-sm)',
+                                        boxShadow: 'var(--neu-shadow-pressed-sm)',
+                                        backgroundColor: 'var(--bg-surface-elevated)',
+                                      }}
+                                    >
+                                      <h5 style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px' }}>
+                                        Session Breakdown ({log.sessions.length} sessions)
+                                      </h5>
+                                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                        {log.sessions.map((session, idx) => (
+                                          <div key={idx} style={{ 
+                                            display: 'flex', 
+                                            alignItems: 'center', 
+                                            gap: '24px', 
+                                            fontSize: '0.875rem', 
+                                            color: 'var(--text-primary)',
+                                            borderBottom: idx < log.sessions.length - 1 ? '1px dashed var(--border-color)' : 'none',
+                                            paddingBottom: idx < log.sessions.length - 1 ? '8px' : '0'
+                                          }}>
+                                            <span style={{ fontWeight: 600, width: '80px', color: 'var(--color-primary)' }}>Session {idx + 1}</span>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                              <span style={{ color: 'var(--text-secondary)' }}>In:</span>
+                                              <span style={{ fontWeight: 500 }}>{formatTime(session.checkIn)}</span>
+                                            </div>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                              <span style={{ color: 'var(--text-secondary)' }}>Out:</span>
+                                              <span style={{ fontWeight: 500 }}>
+                                                {session.checkOut ? (
+                                                  formatTime(session.checkOut)
+                                                ) : (
+                                                  <span style={{ color: 'var(--color-success)', fontWeight: 600 }}>-- (ongoing)</span>
+                                                )}
+                                              </span>
+                                            </div>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  </td>
+                                </tr>
+                              )}
+                            </React.Fragment>
                           );
                         })}
                       </tbody>

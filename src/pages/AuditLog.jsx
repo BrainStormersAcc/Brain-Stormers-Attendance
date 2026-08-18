@@ -675,7 +675,7 @@ export default function AuditLog() {
                       {currentLogs.map((log) => {
                         const affectedStaffUid = log.newData?.userId || log.previousData?.userId;
                         const staffMember = staffList.find(s => s.uid === affectedStaffUid);
-                        const affectedStaffName = staffMember ? staffMember.name : `UID: ${affectedStaffUid?.substring(0, 8)}...`;
+                        const affectedStaffName = staffMember ? staffMember.name : 'Unidentified records';
                         
                         const isExpanded = expandedLogId === log.id;
                         

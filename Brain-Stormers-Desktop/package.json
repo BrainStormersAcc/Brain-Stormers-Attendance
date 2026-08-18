@@ -1,6 +1,6 @@
 {
   "name": "brain-stormers-desktop",
-  "version": "1.0.5",
+  "version": "1.1.8",
   "description": "Desktop wrapper for Brain Stormers Attendance PWA using Electron",
   "main": "main.js",
   "scripts": {

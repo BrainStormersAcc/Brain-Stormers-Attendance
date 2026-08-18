@@ -352,4 +352,14 @@ To prevent hard native crashes (throwing exception code `0x80000003` inside `lib
 4. **Informational UI States**: A status-change listener is established between the main thread and the web application. When no device is present, the "🔍 Fingerprint Tester" widget displays *"No fingerprint scanner detected"* as a clean gray informational state, rather than showing a red error block or crashing the application.
 5. **Koffi Error Protection**: All JavaScript wrapper calls mapping native functions are wrapped in explicit `try/catch` statements to catch manageable koffi or binding errors cleanly.
 
+---
+
+## 14. Single-Instance Application Locking (v1.0.6)
+
+To prevent duplicate processes from launching (which causes conflicts because multiple processes attempt to access the physical fingerprint scanner device exclusively, causing the second process to hang infinitely on loading):
+
+1. **Single Instance Lock**: The app utilizes `app.requestSingleInstanceLock()` as the first setup step. If a second instance is started while the first instance is active, the second instance exits immediately via `app.quit()`.
+2. **Second Instance Restoration**: When a second launch is attempted, the first instance intercepts the `'second-instance'` event, logs the attempt, and automatically restores, shows, and focuses the existing hidden window.
+
+
 

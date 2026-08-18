@@ -1,4 +1,19 @@
 const { app, BrowserWindow, Menu, ipcMain, dialog, Tray } = require('electron');
+
+const gotTheLock = app.requestSingleInstanceLock();
+if (!gotTheLock) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    console.log('[SingleInstance] Second launch attempt blocked, restoring existing window.');
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.show();
+      mainWindow.focus();
+    }
+  });
+}
+
 app.disableHardwareAcceleration();
 const { autoUpdater } = require('electron-updater');
 
@@ -41,6 +56,8 @@ let settingsWindow;
 let staticServer;
 let tray = null;
 let rendererReloadAttempts = [];
+const lastScanTimestamps = new Map(); // uid -> Date.now() of last accepted scan
+const SCAN_COOLDOWN_MS = 5 * 60 * 1000;
 
 const SETTINGS_FILE = path.join(app.getPath('userData'), 'device-settings.json');
 
@@ -756,6 +773,21 @@ async function processBiometricScan(capturedTemplate) {
     return;
   }
 
+  // Cooldown check immediately after the uid is matched, BEFORE any Firestore read/write
+  const lastScan = lastScanTimestamps.get(matchedUid);
+  const nowTime = Date.now();
+  if (lastScan && (nowTime - lastScan) < SCAN_COOLDOWN_MS) {
+    const remainingSec = Math.ceil((SCAN_COOLDOWN_MS - (nowTime - lastScan)) / 1000);
+    console.log(`[Background Listener] Ignoring scan for UID ${matchedUid}, cooldown active (${remainingSec}s remaining).`);
+    if (mainWindow) {
+      mainWindow.webContents.send('attendance:scanned', {
+        success: false,
+        error: `Please wait ${remainingSec}s before scanning again.`
+      });
+    }
+    return;
+  }
+
   console.log(`[Background Listener] Fingerprint matched user ${matchedUid} (score: ${highestScore}). Updating Firestore...`);
 
   try {
@@ -780,125 +812,165 @@ async function processBiometricScan(capturedTemplate) {
     const dd = String(todayObj.getDate()).padStart(2, '0');
     const dateString = `${yyyy}-${mm}-${dd}`;
 
-    // Query today's non-deleted attendance
+    // Query today's non-deleted attendance to find the day-doc
     const attendanceSnapshot = await db.collection('attendance')
       .where('userId', '==', matchedUid)
       .where('date', '==', dateString)
       .where('isDeleted', '==', false)
       .get();
 
-    let existingRecord = null;
-    let existingDocId = null;
-
-    attendanceSnapshot.forEach(doc => {
-      existingRecord = doc.data();
-      existingDocId = doc.id;
-    });
+    let docRef;
+    if (!attendanceSnapshot.empty) {
+      docRef = attendanceSnapshot.docs[0].ref;
+    } else {
+      docRef = db.collection('attendance').doc();
+    }
 
     const now = new Date();
-    const batch = db.batch();
+    let resultStatus = '';
+    let sessionNum = 1;
 
-    if (!existingRecord) {
-      // 1. Create check-in entry
-      const settings = getLocalSettings();
-      const cutoffStr = settings.lateCutoffTime || '09:30';
-      const [cutoffHour, cutoffMinute] = cutoffStr.split(':').map(Number);
-      
-      const currentHour = now.getHours();
-      const currentMinute = now.getMinutes();
-      
-      let status = 'Present';
-      if (currentHour > cutoffHour || (currentHour === cutoffHour && currentMinute > cutoffMinute)) {
-        status = 'Late';
+    await db.runTransaction(async (transaction) => {
+      const docSnapshot = await transaction.get(docRef);
+
+      if (!docSnapshot.exists) {
+        // 2. IF NO DOC EXISTS: Create a new day-doc for Session 1
+        const settings = getLocalSettings();
+        const cutoffStr = settings.lateCutoffTime || '09:30';
+        const [cutoffHour, cutoffMinute] = cutoffStr.split(':').map(Number);
+        
+        const currentHour = now.getHours();
+        const currentMinute = now.getMinutes();
+        
+        let status = 'Present';
+        if (currentHour > cutoffHour || (currentHour === cutoffHour && currentMinute > cutoffMinute)) {
+          status = 'Late';
+        }
+
+        const newAttendance = {
+          userId: matchedUid,
+          role: userData.role || 'staff',
+          date: dateString,
+          status: status,
+          markedBy: 'fingerprint',
+          isDeleted: false,
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          markedByUserId: 'fingerprint-scanner',
+          sessions: [
+            {
+              sessionNumber: 1,
+              checkIn: now,
+              checkOut: null
+            }
+          ]
+        };
+
+        transaction.set(docRef, newAttendance);
+
+        // Audit Log
+        const auditLogRef = db.collection('auditLogs').doc();
+        transaction.set(auditLogRef, {
+          action: 'create',
+          targetCollection: 'attendance',
+          targetDocId: docRef.id,
+          performedBy: 'fingerprint-scanner',
+          performedByName: 'Biometric Scanner Station',
+          timestamp: admin.firestore.FieldValue.serverTimestamp(),
+          reason: `Fingerprint session 1 check-in verified`
+        });
+
+        resultStatus = `Checked In (Session 1, ${status})`;
+        sessionNum = 1;
+      } else {
+        // 3. IF A DOC EXISTS: Check-in or check-out update
+        const docData = docSnapshot.data();
+        let sessions = docData.sessions;
+
+        // Backward compatibility migration for legacy documents
+        if (!sessions || !Array.isArray(sessions)) {
+          const legacyCheckIn = docData.checkIn ? (docData.checkIn.toDate ? docData.checkIn.toDate() : docData.checkIn) : now;
+          const legacyCheckOut = docData.checkOut ? (docData.checkOut.toDate ? docData.checkOut.toDate() : docData.checkOut) : null;
+          
+          sessions = [
+            {
+              sessionNumber: 1,
+              checkIn: legacyCheckIn,
+              checkOut: legacyCheckOut
+            }
+          ];
+        }
+
+        const lastSession = sessions[sessions.length - 1];
+
+        if (!lastSession || lastSession.checkOut !== null) {
+          // Start a NEW session (Check-In)
+          sessionNum = sessions.length + 1;
+          sessions.push({
+            sessionNumber: sessionNum,
+            checkIn: now,
+            checkOut: null
+          });
+
+          const previousData = { ...docData };
+          const newData = { ...docData, sessions };
+
+          transaction.update(docRef, { sessions });
+
+          // Audit Log
+          const auditLogRef = db.collection('auditLogs').doc();
+          transaction.set(auditLogRef, {
+            action: 'update',
+            targetCollection: 'attendance',
+            targetDocId: docRef.id,
+            performedBy: 'fingerprint-scanner',
+            performedByName: 'Biometric Scanner Station',
+            timestamp: admin.firestore.FieldValue.serverTimestamp(),
+            reason: `Fingerprint session ${sessionNum} check-in verified`,
+            previousData,
+            newData
+          });
+
+          resultStatus = `Checked In (Session ${sessionNum})`;
+        } else {
+          // End the current session (Check-Out)
+          sessionNum = lastSession.sessionNumber;
+          lastSession.checkOut = now;
+
+          const previousData = { ...docData };
+          const newData = { ...docData, sessions };
+
+          transaction.update(docRef, { sessions });
+
+          // Audit Log
+          const auditLogRef = db.collection('auditLogs').doc();
+          transaction.set(auditLogRef, {
+            action: 'update',
+            targetCollection: 'attendance',
+            targetDocId: docRef.id,
+            performedBy: 'fingerprint-scanner',
+            performedByName: 'Biometric Scanner Station',
+            timestamp: admin.firestore.FieldValue.serverTimestamp(),
+            reason: `Fingerprint session ${sessionNum} check-out verified`,
+            previousData,
+            newData
+          });
+
+          resultStatus = `Checked Out (Session ${sessionNum})`;
+        }
       }
+    });
 
-      const attendanceRef = db.collection('attendance').doc();
-      const attendanceId = attendanceRef.id;
+    // Update cooldown map and send IPC response
+    lastScanTimestamps.set(matchedUid, Date.now());
+    console.log(`[Background Listener] Attendance session processed: ${name} (${resultStatus})`);
 
-      const newAttendance = {
-        userId: matchedUid,
-        role: userData.role || 'staff',
-        date: dateString,
-        checkIn: now,
-        checkOut: null,
-        status: status,
-        markedBy: 'fingerprint',
-        isDeleted: false,
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
-        markedByUserId: 'fingerprint-scanner'
-      };
-
-      batch.set(attendanceRef, newAttendance);
-
-      // Audit Log
-      const auditLogRef = db.collection('auditLogs').doc();
-      batch.set(auditLogRef, {
-        action: 'create',
-        targetCollection: 'attendance',
-        targetDocId: attendanceId,
-        performedBy: 'fingerprint-scanner',
-        performedByName: 'Biometric Scanner Station',
-        timestamp: admin.firestore.FieldValue.serverTimestamp(),
-        reason: 'Fingerprint check-in verified'
+    if (mainWindow) {
+      mainWindow.webContents.send('attendance:scanned', { 
+        success: true, 
+        name, 
+        status: resultStatus, 
+        time: now.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }) 
       });
-
-      await batch.commit();
-      console.log(`[Background Listener] Check-in registered for ${name} (Status: ${status})`);
-
-      if (mainWindow) {
-        mainWindow.webContents.send('attendance:scanned', { 
-          success: true, 
-          name, 
-          status: `Checked In (${status})`, 
-          time: now.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }) 
-        });
-      }
-    } else if (!existingRecord.checkOut) {
-      // 2. Perform check-out update
-      const attendanceRef = db.collection('attendance').doc(existingDocId);
-      const checkOutUpdate = {
-        checkOut: now,
-        status: existingRecord.status || 'Present',
-        lastEditedBy: 'fingerprint-scanner',
-        lastEditedAt: admin.firestore.FieldValue.serverTimestamp()
-      };
-
-      batch.update(attendanceRef, checkOutUpdate);
-
-      // Audit Log
-      const auditLogRef = db.collection('auditLogs').doc();
-      batch.set(auditLogRef, {
-        action: 'update',
-        targetCollection: 'attendance',
-        targetDocId: existingDocId,
-        performedBy: 'fingerprint-scanner',
-        performedByName: 'Biometric Scanner Station',
-        timestamp: admin.firestore.FieldValue.serverTimestamp(),
-        reason: 'Fingerprint check-out verified',
-        previousData: existingRecord,
-        newData: { ...existingRecord, ...checkOutUpdate }
-      });
-
-      await batch.commit();
-      console.log(`[Background Listener] Check-out recorded for ${name}`);
-
-      if (mainWindow) {
-        mainWindow.webContents.send('attendance:scanned', { 
-          success: true, 
-          name, 
-          status: 'Checked Out', 
-          time: now.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }) 
-        });
-      }
-    } else {
-      // 3. Already completed check-in & check-out today
-      console.log(`[Background Listener] User ${name} already checked out today.`);
-      if (mainWindow) {
-        mainWindow.webContents.send('attendance:scanned', { 
-          success: false, 
-          error: `${name} has already checked out today.` 
-        });
-      }
     }
   } catch (err) {
     console.error('[Background Listener] Attendance logic failed:', err.message);
@@ -1005,6 +1077,7 @@ app.on('before-quit', () => {
 });
 
 app.whenReady().then(() => {
+  if (!gotTheLock) return;
   createWindow();
   createTray();
   initializeAutoUpdater();
